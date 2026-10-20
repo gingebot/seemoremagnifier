@@ -56,7 +56,8 @@ The v1 implementation prioritizes a responsive representation of the visible pre
 ### 3.2 Platform decisions
 
 - The app targets Android phones and tablets with a front-facing camera.
-- The minimum and target SDK versions must be selected in the Gradle project and recorded here when the project is created.
+- Minimum SDK: 26; compile SDK: 36; target SDK: 36. These values are also recorded with the pinned toolchain in [`development.md`](development.md).
+- The application ID and namespace are `com.seemoremagnifier`.
 - Portrait and landscape are supported unless usability testing establishes that portrait-only operation is preferable.
 - The UI uses edge-to-edge layout with camera content behind system bars where appropriate.
 - The app keeps the display awake while a live preview is active and does not force the display to remain awake while frozen.

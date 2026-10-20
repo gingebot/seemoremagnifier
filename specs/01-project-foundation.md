@@ -52,8 +52,8 @@ Create the minimal Android application foundation so the project builds, tests, 
 
 ## Completion Checklist
 
-- [ ] Android project and Gradle wrapper created.
-- [ ] Versions and application ID recorded.
-- [ ] Debug build, unit tests, and lint pass.
-- [ ] Debug APK installed and launched on the connected device.
-- [ ] No generated artifacts or secrets committed.
+- [x] Android project and Gradle wrapper created.
+- [x] Versions and application ID recorded.
+- [x] Debug build, unit tests, lint, and instrumented smoke test pass.
+- [x] Debug APK clean-installed and cold-launched on the connected device.
+- [x] No generated artifacts or secrets committed.
