@@ -10,7 +10,7 @@ import kotlin.math.hypot
 
 /** Shared, coordinated tap/pinch recognition for live preview and frozen content. */
 internal suspend fun PointerInputScope.detectMagnifierGestures(
-    onTap: () -> Unit,
+    onTap: (Offset) -> Unit,
     onZoom: (Float) -> Unit,
 ) {
     awaitEachGesture {
@@ -26,7 +26,7 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
                     tapTracker.canFinishAsTap() &&
                     event.changes.none { it.isConsumed }
                 ) {
-                    onTap()
+                    onTap(down.position)
                 }
                 break
             }

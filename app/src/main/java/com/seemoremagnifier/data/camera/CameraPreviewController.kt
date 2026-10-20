@@ -6,7 +6,10 @@ import android.content.pm.PackageManager
 import android.view.Surface
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.CameraControl
+import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.core.ZoomState
@@ -23,6 +26,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Executor
 import java.util.concurrent.CancellationException
 import java.util.concurrent.ExecutionException
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Owns the CameraX preview use case used by the live magnifier screen. */
 class CameraPreviewController(context: Context) {
@@ -31,6 +36,7 @@ class CameraPreviewController(context: Context) {
     private var cameraProvider: ProcessCameraProvider? = null
     private var previewUseCase: Preview? = null
     private var analysisUseCase: ImageAnalysis? = null
+    private var imageCaptureUseCase: ImageCapture? = null
     private var cameraControl: androidx.camera.core.CameraControl? = null
     private var requestedZoomRatio: Float? = null
     private var bindGeneration = 0
@@ -74,7 +80,7 @@ class CameraPreviewController(context: Context) {
                     return@addListener
                 }
 
-                val oldUseCases = listOfNotNull(previewUseCase, analysisUseCase)
+                val oldUseCases = listOfNotNull(previewUseCase, analysisUseCase, imageCaptureUseCase)
                 if (oldUseCases.isNotEmpty()) provider.unbind(*oldUseCases.toTypedArray())
 
                 val preview = Preview.Builder()
@@ -90,10 +96,16 @@ class CameraPreviewController(context: Context) {
                     analyzeFrame(image, previewView, frameStore, onFrameError)
                 }
 
-                val camera = provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
+                val imageCapture = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                    .setTargetRotation(previewView.display?.rotation ?: Surface.ROTATION_0)
+                    .build()
+
+                val camera = provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis, imageCapture)
                 cameraProvider = provider
                 previewUseCase = preview
                 analysisUseCase = analysis
+                imageCaptureUseCase = imageCapture
                 cameraControl = camera.cameraControl
                 activeLifecycleOwner = lifecycleOwner
                 activePreviewView = previewView
@@ -179,11 +191,99 @@ class CameraPreviewController(context: Context) {
 
     fun unbind() {
         bindGeneration++
-        val useCases = listOfNotNull(previewUseCase, analysisUseCase).toTypedArray()
+        val useCases = listOfNotNull(previewUseCase, analysisUseCase, imageCaptureUseCase).toTypedArray()
         if (useCases.isNotEmpty()) cameraProvider?.unbind(*useCases)
         previewUseCase = null
         analysisUseCase = null
+        imageCaptureUseCase = null
         cameraControl = null
+    }
+
+    fun focusAndCapture(
+        x: Float,
+        y: Float,
+        previewWidth: Int,
+        previewHeight: Int,
+        onCaptured: (Bitmap) -> Unit,
+        onError: (CameraError) -> Unit,
+    ) {
+        val capture = imageCaptureUseCase ?: run {
+            onError(CameraError.CaptureFailed)
+            return
+        }
+        val preview = activePreviewView ?: run {
+            onError(CameraError.CaptureFailed)
+            return
+        }
+        val captureGeneration = bindGeneration
+        val captureStarted = AtomicBoolean(false)
+        val captureStill: () -> Unit = {
+            if (captureStarted.compareAndSet(false, true) &&
+                captureGeneration == bindGeneration && imageCaptureUseCase === capture
+            ) {
+                try {
+                    capture.takePicture(analysisExecutor, object : ImageCapture.OnImageCapturedCallback() {
+                        override fun onCaptureSuccess(image: ImageProxy) {
+                            try {
+                                val bitmap = AnalysisFrameConverter.convertStill(image, previewWidth, previewHeight)
+                                mainExecutor.execute {
+                                    if (captureGeneration == bindGeneration && imageCaptureUseCase === capture) {
+                                        onCaptured(bitmap)
+                                    } else {
+                                        bitmap.recycle()
+                                    }
+                                }
+                            } catch (_: OutOfMemoryError) {
+                                mainExecutor.execute {
+                                    if (captureGeneration == bindGeneration) onError(CameraError.FrameAllocationFailed)
+                                }
+                            } catch (_: Exception) {
+                                mainExecutor.execute {
+                                    if (captureGeneration == bindGeneration) onError(CameraError.CaptureFailed)
+                                }
+                            } finally {
+                                image.close()
+                            }
+                        }
+
+                        override fun onError(exception: ImageCaptureException) {
+                            mainExecutor.execute {
+                                if (captureGeneration == bindGeneration) onError(CameraError.CaptureFailed)
+                            }
+                        }
+                    })
+                } catch (_: Exception) {
+                    mainExecutor.execute {
+                        if (captureGeneration == bindGeneration) onError(CameraError.CaptureFailed)
+                    }
+                }
+            }
+        }
+
+        val control = cameraControl
+        if (control == null || previewWidth <= 0 || previewHeight <= 0) {
+            captureStill()
+            return
+        }
+        try {
+            val point = preview.meteringPointFactory.createPoint(
+                x.coerceIn(0f, previewWidth.toFloat()),
+                y.coerceIn(0f, previewHeight.toFloat()),
+            )
+            val action = FocusMeteringAction.Builder(point)
+                .setAutoCancelDuration(3, TimeUnit.SECONDS)
+                .build()
+            val focusFuture = control.startFocusAndMetering(action)
+            val timeout = Runnable { captureStill() }
+            val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            mainHandler.postDelayed(timeout, FOCUS_TIMEOUT_MS)
+            focusFuture.addListener({
+                mainHandler.removeCallbacks(timeout)
+                captureStill()
+            }, mainExecutor)
+        } catch (_: Exception) {
+            captureStill()
+        }
     }
 
     fun rebind(
@@ -238,5 +338,9 @@ class CameraPreviewController(context: Context) {
         } finally {
             image.close()
         }
+    }
+
+    private companion object {
+        const val FOCUS_TIMEOUT_MS = 900L
     }
 }

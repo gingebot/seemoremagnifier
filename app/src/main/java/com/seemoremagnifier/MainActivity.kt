@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.seemoremagnifier.data.camera.CameraPreviewController
@@ -239,6 +240,7 @@ private fun CameraPreviewContent(
     var frozenZoomRatio by remember { mutableFloatStateOf(1f) }
     var frozenBaseZoomRatio by remember { mutableFloatStateOf(1f) }
     var frozenFrame by remember { mutableStateOf<Bitmap?>(null) }
+    var isCapturingStill by remember { mutableStateOf(false) }
     var isRebindingAfterFreeze by remember { mutableStateOf(false) }
     var zoomErrorVisible by remember { mutableStateOf(false) }
     val latestZoomState = rememberUpdatedState(zoomState)
@@ -248,6 +250,44 @@ private fun CameraPreviewContent(
         if (error == CameraError.ZoomFailed) zoomErrorVisible = true else onCameraError(error)
     }
     val latestZoomErrorHandler = rememberUpdatedState(currentZoomErrorHandler)
+    val freezeWithLatestAnalysisFrame: (CameraError) -> Unit = { error ->
+        val fallback = frameStore.freezeLatest()
+        if (fallback == null) {
+            isCapturingStill = false
+            onFrameError(CameraError.NoFrameAvailable)
+        } else {
+            frozenBaseZoomRatio = savedZoomRatio
+            frozenZoomRatio = savedZoomRatio
+            frozenFrame = fallback
+            isCapturingStill = false
+            previewController.unbind()
+            onFrameError(error)
+        }
+    }
+    val latestFallbackHandler = rememberUpdatedState(freezeWithLatestAnalysisFrame)
+    val liveTapHandler: (Offset) -> Unit = { tapPosition ->
+        if (cameraError == null && frozenFrame == null && !isCapturingStill) {
+            isCapturingStill = true
+            val view = previewView
+            previewController.focusAndCapture(
+                x = tapPosition.x,
+                y = tapPosition.y,
+                previewWidth = view?.width ?: 0,
+                previewHeight = view?.height ?: 0,
+                onCaptured = { captured ->
+                    frameStore.freezeLatest()?.let { if (!it.isRecycled) it.recycle() }
+                    frameStore.pause()
+                    frozenBaseZoomRatio = savedZoomRatio
+                    frozenZoomRatio = savedZoomRatio
+                    frozenFrame = captured
+                    isCapturingStill = false
+                    previewController.unbind()
+                },
+                onError = { error -> latestFallbackHandler.value(error) },
+            )
+        }
+    }
+    val latestLiveTapHandler = rememberUpdatedState(liveTapHandler)
 
     LaunchedEffect(zoomErrorVisible) {
         if (zoomErrorVisible) {
@@ -350,25 +390,28 @@ private fun CameraPreviewContent(
                     .pointerInput(previewController) {
                         detectMagnifierGestures(
                             onZoom = { scale ->
+                                if (isCapturingStill) return@detectMagnifierGestures
                                 val state = latestZoomState.value ?: return@detectMagnifierGestures
                                 previewController.zoomBy(scale, state, latestZoomErrorHandler.value)
                             },
-                            onTap = {
-                                if (cameraError == null && frozenFrame == null) {
-                                    val latest = frameStore.freezeLatest()
-                                    if (latest == null) {
-                                        onFrameError(CameraError.NoFrameAvailable)
-                                    } else {
-                                        frozenBaseZoomRatio = savedZoomRatio
-                                        frozenZoomRatio = savedZoomRatio
-                                        frozenFrame = latest
-                                        previewController.unbind()
-                                    }
-                                }
-                            },
+                            onTap = { latestLiveTapHandler.value(it) },
                         )
                     },
             )
+        }
+        if (isCapturingStill) {
+            Surface(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ) {
+                Text(
+                    text = stringResource(R.string.camera_focusing),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
         }
         frozenFrame?.let { frame ->
             FrozenFrameContent(
@@ -376,6 +419,7 @@ private fun CameraPreviewContent(
                 zoomRatio = frozenZoomRatio,
                 baseZoomRatio = frozenBaseZoomRatio,
                 isRebinding = isRebindingAfterFreeze,
+                isCapturingStill = isCapturingStill,
                 rebindError = cameraError,
                 onZoom = { scale ->
                     val bounds = zoomState ?: return@FrozenFrameContent
@@ -445,6 +489,7 @@ private fun FrozenFrameContent(
     zoomRatio: Float,
     baseZoomRatio: Float,
     isRebinding: Boolean,
+    isCapturingStill: Boolean,
     rebindError: CameraError?,
     onZoom: (Float) -> Unit,
     onResume: () -> Unit,
@@ -455,13 +500,13 @@ private fun FrozenFrameContent(
         modifier = Modifier
             .fillMaxSize()
             .clipToBounds()
-            .pointerInput(frame, isRebinding, rebindError) {
+            .pointerInput(frame, isRebinding, isCapturingStill, rebindError) {
                 detectMagnifierGestures(
                     onZoom = { scale ->
-                        if (!isRebinding && rebindError == null) latestOnZoom.value(scale)
+                        if (!isRebinding && !isCapturingStill && rebindError == null) latestOnZoom.value(scale)
                     },
                     onTap = {
-                        if (!isRebinding && rebindError == null) latestOnResume.value()
+                        if (!isRebinding && !isCapturingStill && rebindError == null) latestOnResume.value()
                     },
                 )
             },
@@ -490,6 +535,7 @@ private fun FrozenFrameContent(
         }
         Text(
             text = when {
+                isCapturingStill -> stringResource(R.string.camera_focusing)
                 isRebinding -> stringResource(R.string.camera_rebinding)
                 rebindError != null -> stringResource(rebindError.messageRes)
                 else -> stringResource(R.string.tap_to_resume)
@@ -498,15 +544,21 @@ private fun FrozenFrameContent(
             color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.bodyLarge,
         )
-        if (rebindError != null) {
+        if (rebindError != null && !isCapturingStill) {
             Button(
                 onClick = onResume,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),
             ) { Text(stringResource(R.string.retry_camera)) }
+        } else if (isCapturingStill) {
+            Button(
+                onClick = onResume,
+                enabled = false,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),
+            ) { Text(stringResource(R.string.camera_focusing)) }
         } else {
             Button(
                 onClick = onResume,
-                enabled = !isRebinding,
+                enabled = !isRebinding && !isCapturingStill,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),
             ) { Text(stringResource(R.string.resume_live_view)) }
         }

@@ -47,11 +47,11 @@ The v1 implementation prioritizes a responsive representation of the visible pre
 
 - Kotlin.
 - Jetpack Compose for the UI.
-- CameraX `Preview` and `ImageAnalysis`.
+- CameraX `Preview`, `ImageAnalysis`, and in-memory `ImageCapture`.
 - AndroidX Lifecycle and ViewModel.
 - Coroutines and Flow for asynchronous state and camera events.
 
-`ImageCapture` is intentionally not used in v1. It is reserved for a future save/share feature that requires high-resolution still capture.
+`ImageCapture` is used in v1 for high-quality, in-memory freeze captures; it does not persist or export captured images.
 
 ### 3.2 Platform decisions
 
@@ -220,7 +220,7 @@ The implementation must handle devices with no available rear camera as a camera
 
 ### 6.2 Freeze strategy
 
-V1 uses `ImageAnalysis`, not `ImageCapture`, because the required behavior is to freeze a recent view of what the user is seeing.
+`ImageAnalysis` supplies an immediate fallback frame while `ImageCapture` produces the higher-resolution frozen still. Both are bound with `Preview`; still captures are kept in memory and never written to shared storage.
 
 `CameraFrameAnalyzer`:
 
@@ -232,11 +232,11 @@ V1 uses `ImageAnalysis`, not `ImageCapture`, because the required behavior is to
 
 When the user taps freeze:
 
-1. The ViewModel requests the latest candidate frame.
-2. If no frame is available, it remains live and presents a transient freeze-failure message.
-3. If a frame is available, ownership transfers to the frozen state.
-4. The frozen UI remains mounted while the camera controller unbinds preview and analysis use cases to stop camera access while frozen.
-5. The frozen frame is displayed with UI scaling/cropping.
+1. Keep the live preview and analysis running while capture is pending; show a “Focusing—hold steady” status overlay and ignore repeated taps/pinch zoom.
+2. Map the tap position through `PreviewView.meteringPointFactory` and send it to `CameraControl.startFocusAndMetering`.
+3. On focus completion or a short timeout, `ImageCapture.takePicture` captures an in-memory JPEG.
+4. Decode the still off the main thread, correct orientation, and center-crop to the preview aspect ratio. Decode sampling bounds the still to 2560 pixels per dimension.
+5. On successful still delivery, show that still as the frozen image and unbind camera use cases. On failure, freeze the latest analysis candidate instead and report the fallback notice.
 
 When the user unfreezes:
 
@@ -252,6 +252,8 @@ In `Live`, pinch input is converted to a clamped zoom ratio and applied through 
 Zoom uses multiplicative gesture scale (`newRatio = currentRatio × gestureScale`), clamped to `ZoomState.minZoomRatio..maxZoomRatio`. The indicator displays the latest CameraX-reported `zoomRatio`, formatted to one decimal place. Pinch gestures may issue a newer zoom command before an earlier `setZoomRatio` future completes; CameraX cancellation of a superseded request is expected and must not be surfaced as a camera error or interrupt preview.
 
 In `Frozen`, the same logical zoom ratio is applied through a clipped scale transform to the frozen frame, relative to the zoom ratio at capture. Frozen zoom is clamped to the capture ratio and the camera's maximum, so scaling cannot reveal empty regions beyond the captured image. The latest logical ratio is restored to CameraX on resume. The frozen image must not be re-read from the camera.
+
+Freeze uses a best-effort autofocus/metering request at the tap location, followed by an in-memory `ImageCapture` still on focus completion or after a short timeout. The still is decoded at up to 2560 pixels per dimension, improving on the analysis fallback's 1280×720 cap and lossy conversion quality. Capture/conversion errors leave the already displayed analysis frame frozen.
 
 Pinch input must not generate a tap. A gesture detector must cancel a pending tap when movement exceeds the tap threshold or multiple pointers are detected.
 
@@ -375,7 +377,7 @@ All `ImageProxy` instances must be closed in success and failure paths. Internal
 - Front camera and torch.
 - Brightness/contrast sliders.
 - Edge enhancement filters.
-- Saving/sharing frozen frames using `ImageCapture` or an export pipeline.
+- Saving/sharing frozen frames to shared storage or an export pipeline.
 - Preset zoom levels.
 - A settings screen for custom accessibility preferences.
 

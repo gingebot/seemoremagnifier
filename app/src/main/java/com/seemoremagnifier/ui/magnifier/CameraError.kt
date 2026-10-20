@@ -12,4 +12,5 @@ enum class CameraError(@param:StringRes val messageRes: Int) {
     NoFrameAvailable(R.string.no_frame_available),
     FrameConversionFailed(R.string.frame_conversion_failed),
     FrameAllocationFailed(R.string.frame_allocation_failed),
+    CaptureFailed(R.string.camera_capture_failed),
 }

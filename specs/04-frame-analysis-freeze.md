@@ -19,17 +19,20 @@ Capture and display the most recently available camera frame when the user taps 
 - Apply rotation and preview crop rules without mirroring the rear-camera image.
 - Store only the latest candidate frame in `LatestFrameStore`.
 - Freeze the candidate frame on tap.
+- Capture an in-memory high-quality still after best-effort tap-point focus/metering; retain the analysis frame as a fallback.
 - Handle missing frames and conversion/allocation errors.
 
 ## Requirements
 
-1. Every `ImageProxy` is closed on success and failure paths.
+1. Every analysis and still-capture `ImageProxy` is closed on success and failure paths.
 2. Frame conversion never runs on the main thread.
 3. Only one candidate frame is retained.
 4. Frames are downsampled to a display-appropriate maximum size.
 5. The frozen frame matches the preview orientation and mirror behavior.
 6. Tapping before a frame is ready leaves the app live and reports a transient error.
 7. Freeze does not persist an image to shared storage.
+8. Still capture proceeds after focus completion or timeout; focus failure does not block freezing.
+9. The live preview remains visible until still capture completes; still-capture failure freezes the latest available analysis fallback.
 
 ## Acceptance Criteria
 
@@ -37,6 +40,7 @@ Capture and display the most recently available camera frame when the user taps 
 - Frozen content is displayed without active camera streaming being required by this feature.
 - Repeated freeze attempts do not leak frame memory.
 - Conversion and allocation failures are user-presentable and nonfatal.
+- Successful still capture provides more detail than the capped analysis fallback on supported devices.
 - Freeze latency is acceptable on the connected device.
 
 ## Tests and Device Validation
@@ -61,4 +65,5 @@ Capture and display the most recently available camera frame when the user taps 
 - [x] Frame conversion is backgrounded and bounded.
 - [x] Frozen frame displays with rear-camera orientation and crop.
 - [x] Candidate ownership and cleanup paths are unit-tested.
+- [x] In-memory still capture with best-effort tap-point focus and analysis fallback implemented.
 - [ ] Physical-device freeze latency and repeated freeze/unfreeze validation remains deferred if the device is locked or non-interactive. The current device install is ready, but permission is currently reset to denied by test cleanup.

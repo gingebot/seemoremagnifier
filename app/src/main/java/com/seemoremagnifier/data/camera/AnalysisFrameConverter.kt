@@ -13,6 +13,8 @@ import kotlin.math.ceil
 internal object AnalysisFrameConverter {
     private const val MAX_OUTPUT_WIDTH = 1280
     private const val MAX_OUTPUT_HEIGHT = 720
+    private const val MAX_STILL_WIDTH = 2560
+    private const val MAX_STILL_HEIGHT = 2560
     private const val JPEG_QUALITY = 82
 
     fun convert(image: ImageProxy, previewWidth: Int, previewHeight: Int): Bitmap {
@@ -50,6 +52,41 @@ internal object AnalysisFrameConverter {
             rotated
         }
 
+        return centerCropToAspect(oriented, previewWidth.toFloat() / previewHeight)
+    }
+
+    /** Decodes a high-resolution CameraX JPEG still, preserving its full detail within safe bounds. */
+    fun convertStill(image: ImageProxy, previewWidth: Int, previewHeight: Int): Bitmap {
+        require(image.format == android.graphics.ImageFormat.JPEG) {
+            "Unsupported still format: ${image.format}"
+        }
+        require(previewWidth > 0 && previewHeight > 0) { "Preview dimensions are not available." }
+        val jpegPlane = image.planes.firstOrNull() ?: error("Captured still has no JPEG data.")
+        val jpegBuffer = jpegPlane.buffer.duplicate()
+        val jpeg = ByteArray(jpegBuffer.remaining()).also(jpegBuffer::get)
+        val bounds = BitmapFactory.Options().also {
+            it.inJustDecodeBounds = true
+            BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, it)
+        }
+        val rotation = ((image.imageInfo.rotationDegrees % 360) + 360) % 360
+        val sourceWidth = bounds.outWidth.takeIf { it > 0 } ?: image.width
+        val sourceHeight = bounds.outHeight.takeIf { it > 0 } ?: image.height
+        val rotatedWidth = if (rotation == 90 || rotation == 270) sourceHeight else sourceWidth
+        val rotatedHeight = if (rotation == 90 || rotation == 270) sourceWidth else sourceHeight
+        val sampleSize = stillSampleSizeFor(rotatedWidth, rotatedHeight)
+        val decoded = BitmapFactory.decodeByteArray(
+            jpeg,
+            0,
+            jpeg.size,
+            BitmapFactory.Options().apply { inSampleSize = sampleSize },
+        ) ?: error("Captured still could not be decoded.")
+
+        val oriented = if (rotation == 0) decoded else {
+            val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+            val rotated = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+            if (rotated !== decoded) decoded.recycle()
+            rotated
+        }
         return centerCropToAspect(oriented, previewWidth.toFloat() / previewHeight)
     }
 
@@ -116,6 +153,15 @@ internal object AnalysisFrameConverter {
     private fun calculateSampleSize(width: Int, height: Int): Int {
         var sampleSize = 1
         while (width / sampleSize > MAX_OUTPUT_WIDTH || height / sampleSize > MAX_OUTPUT_HEIGHT) {
+            sampleSize *= 2
+        }
+        return sampleSize
+    }
+
+    internal fun stillSampleSizeFor(width: Int, height: Int): Int {
+        require(width > 0 && height > 0) { "Still dimensions must be positive." }
+        var sampleSize = 1
+        while (width / sampleSize > MAX_STILL_WIDTH || height / sampleSize > MAX_STILL_HEIGHT) {
             sampleSize *= 2
         }
         return sampleSize
