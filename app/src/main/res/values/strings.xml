@@ -13,4 +13,5 @@
     <string name="rear_camera_unavailable">This device does not have an available rear-facing camera.</string>
     <string name="camera_initialization_failed">The camera could not be initialized. Check that no other app is using it, then retry.</string>
     <string name="camera_binding_failed">The rear camera could not be started. Please retry.</string>
+    <string name="camera_zoom_failed">Zoom could not be changed. Please try pinching again.</string>
 </resources>

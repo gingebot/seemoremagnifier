@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -27,10 +28,15 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -39,6 +45,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.seemoremagnifier.data.camera.CameraPreviewController
 import com.seemoremagnifier.ui.magnifier.CameraError
+import androidx.camera.core.ZoomState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -203,6 +210,25 @@ private fun CameraPreviewContent(
     val previewController = remember(context) { CameraPreviewController(context) }
     var previewView by remember { mutableStateOf<androidx.camera.view.PreviewView?>(null) }
     var previewBound by remember { mutableStateOf(false) }
+    var zoomState by remember { mutableStateOf<ZoomState?>(null) }
+    var savedZoomRatio by rememberSaveable { mutableFloatStateOf(1f) }
+    var zoomErrorVisible by remember { mutableStateOf(false) }
+    val latestZoomState = rememberUpdatedState(zoomState)
+    val currentZoomErrorHandler: (CameraError) -> Unit = { error ->
+        if (error == CameraError.ZoomFailed) {
+            zoomErrorVisible = true
+        } else {
+            onCameraError(error)
+        }
+    }
+    val latestZoomErrorHandler = rememberUpdatedState(currentZoomErrorHandler)
+
+    LaunchedEffect(zoomErrorVisible) {
+        if (zoomErrorVisible) {
+            kotlinx.coroutines.delay(1_800)
+            zoomErrorVisible = false
+        }
+    }
 
     DisposableEffect(previewController) {
         onDispose { previewController.unbind() }
@@ -214,8 +240,13 @@ private fun CameraPreviewContent(
         previewController.bind(
             lifecycleOwner = lifecycleOwner,
             previewView = view,
+            requestedZoomRatio = savedZoomRatio,
             onBound = { previewBound = true },
-            onError = onCameraError,
+            onZoomState = {
+                zoomState = it
+                savedZoomRatio = it.zoomRatio
+            },
+            onError = currentZoomErrorHandler,
         )
     }
 
@@ -224,6 +255,45 @@ private fun CameraPreviewContent(
             modifier = Modifier.fillMaxSize(),
             onPreviewViewCreated = { previewView = it },
         )
+        if (cameraError == null && previewBound) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(previewController) {
+                        detectTransformGestures { _, _, zoomChange, _ ->
+                            val currentZoomState = latestZoomState.value
+                                ?: return@detectTransformGestures
+                            if (zoomChange.isFinite() && zoomChange > 0f &&
+                                kotlin.math.abs(zoomChange - 1f) > 0.001f
+                            ) {
+                                previewController.zoomBy(
+                                    zoomChange,
+                                    currentZoomState,
+                                    latestZoomErrorHandler.value,
+                                )
+                            }
+                        }
+                    },
+            )
+        }
+        zoomState?.let { currentZoom ->
+            ZoomIndicator(
+                zoomRatio = currentZoom.zoomRatio,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 56.dp),
+            )
+        }
+        if (zoomErrorVisible && cameraError == null) {
+            Text(
+                text = stringResource(R.string.camera_zoom_failed),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 32.dp),
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
         when {
             cameraError != null -> {
                 PermissionMessage(
@@ -247,6 +317,26 @@ private fun CameraPreviewContent(
 }
 
 @Composable
+private fun ZoomIndicator(
+    zoomRatio: Float,
+    modifier: Modifier = Modifier,
+) {
+    val locale = LocalLocale.current.platformLocale
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Text(
+            text = String.format(locale, "%.1fx", zoomRatio),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+}
+
+@Composable
 private fun AndroidCameraPreview(
     modifier: Modifier = Modifier,
     onPreviewViewCreated: (androidx.camera.view.PreviewView) -> Unit,
@@ -256,7 +346,8 @@ private fun AndroidCameraPreview(
         factory = { context ->
             androidx.camera.view.PreviewView(context).apply {
                 scaleType = androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
-                implementationMode = androidx.camera.view.PreviewView.ImplementationMode.PERFORMANCE
+                // Use TextureView so the Compose gesture/indicator overlay shares the same window layer.
+                implementationMode = androidx.camera.view.PreviewView.ImplementationMode.COMPATIBLE
                 contentDescription = context.getString(R.string.live_camera_preview_description)
                 onPreviewViewCreated(this)
             }

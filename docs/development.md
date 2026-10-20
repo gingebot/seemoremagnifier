@@ -37,8 +37,7 @@ The initial Android project uses this pinned version set:
 | Compose compiler Gradle plugin | `org.jetbrains.kotlin.plugin.compose`, 2.3.21 |
 | Compose BOM | 2026.06.01 |
 | AndroidX Activity Compose | 1.13.0 |
-| AndroidX Lifecycle | 2.10.0 |
-| AndroidX Lifecycle Compose | 2.10.0 |
+| AndroidX Lifecycle / Lifecycle Compose | 2.10.0 |
 | CameraX | 1.6.2 |
 | AndroidX Core KTX | 1.17.0 |
 | Coroutines Android | 1.10.2 |
@@ -99,6 +98,8 @@ For every change:
 4. Record any device-specific findings or limitations in the relevant issue or test report.
 
 The connected physical device is particularly important for rear-camera behavior, aspect ratio, gesture interaction, lifecycle transitions, and accessibility behavior.
+
+Do not unlock a connected device or send touch input as part of automated validation. If the device is locked, keep validation non-interactive and defer manual camera/gesture checks.
 
 ## 5. Release Policy
 

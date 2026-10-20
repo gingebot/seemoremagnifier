@@ -210,6 +210,7 @@ The implementation must define and test the following CameraX configuration:
 - `PreviewView.ScaleType.FILL_CENTER` is used for the live preview; this fills the available area and center-crops where aspect ratios differ.
 - Preview target rotation is initialized from the `PreviewView` display rotation. Activity recreation on orientation change rebinds with the new display rotation.
 - The rear-camera preview is not mirrored; no software mirror transform is applied in v1.
+- CameraX `ZoomState` is the source of applied zoom and min/max bounds. UI preserves the requested ratio across camera rebinds and clamps it to the new camera bounds.
 - `ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST` backpressure.
 - Explicit target rotation based on the current display rotation.
 - A preview and analysis resolution strategy appropriate for the display, rather than always retaining the camera's maximum resolution.
@@ -249,6 +250,8 @@ When the user unfreezes:
 
 In `Live`, pinch input is converted to a clamped zoom ratio and applied through CameraX `CameraControl.setZoomRatio`.
 
+Zoom uses multiplicative gesture scale (`newRatio = currentRatio × gestureScale`), clamped to `ZoomState.minZoomRatio..maxZoomRatio`. The indicator displays the latest CameraX-reported `zoomRatio`, formatted to one decimal place. Pinch gestures may issue a newer zoom command before an earlier `setZoomRatio` future completes; CameraX cancellation of a superseded request is expected and must not be surfaced as a camera error or interrupt preview.
+
 In `Frozen`, the same logical zoom ratio is applied through a crop/scale transform to the frozen frame. The frozen image must not be re-read from the camera.
 
 Pinch input must not generate a tap. A gesture detector must cancel a pending tap when movement exceeds the tap threshold or multiple pointers are detected.
@@ -261,6 +264,7 @@ The UI uses Compose pointer input to recognize semantic gestures:
 
 - `Tap` becomes `ToggleFreeze`.
 - `Pinch` becomes `ZoomGestureChanged(scale)`.
+- Live pinch scales the requested camera zoom; a one-pointer pan or a transform with no scale change is ignored.
 
 Tap and pinch recognition are coordinated in one gesture pipeline or through explicit cancellation rules. Independent overlapping `clickable` and transform detectors must not cause a pinch to freeze the image.
 

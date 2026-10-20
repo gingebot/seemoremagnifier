@@ -8,4 +8,5 @@ enum class CameraError(@param:StringRes val messageRes: Int) {
     RearCameraUnavailable(R.string.rear_camera_unavailable),
     InitializationFailed(R.string.camera_initialization_failed),
     BindingFailed(R.string.camera_binding_failed),
+    ZoomFailed(R.string.camera_zoom_failed),
 }

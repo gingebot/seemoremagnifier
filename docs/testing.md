@@ -60,6 +60,8 @@ On a representative physical device, verify:
 
 Camera, gesture, lifecycle, and accessibility behavior must be checked on the connected physical device because these behaviors cannot be fully validated with unit tests or a generic emulator.
 
+Before touch-driven device checks, confirm the device is interactive. If it is locked or otherwise unavailable, do not attempt to unlock it or inject gestures; report the hardware check as deferred and rely on build/unit/instrumentation checks that do not require interaction.
+
 ## 3. Device Coverage
 
 Before release, test on at least:

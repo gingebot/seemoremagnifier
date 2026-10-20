@@ -26,6 +26,7 @@ Allow users to pinch-zoom the live rear-camera preview with bounded, stable zoom
 4. The displayed zoom value reflects the applied value, not only the gesture input.
 5. Zoom survives ordinary recomposition and is preserved through supported lifecycle transitions.
 6. The zoom indicator remains readable over the camera image.
+7. A `setZoomRatio` request superseded by a newer pinch update is treated as normal cancellation; it must not make the preview unavailable or stop later zoom updates.
 
 ## Acceptance Criteria
 
@@ -41,6 +42,7 @@ Allow users to pinch-zoom the live rear-camera preview with bounded, stable zoom
 - Test single tap versus multi-pointer gesture interpretation.
 - Verify zoom range and responsiveness on the connected device.
 - Test with large system font/display scaling.
+- If the phone is locked, do not attempt touch-driven device checks; rely on build/unit/UI tests and defer live pinch validation until the user can unlock the device.
 
 ## Risks and Edge Cases
 
@@ -51,8 +53,9 @@ Allow users to pinch-zoom the live rear-camera preview with bounded, stable zoom
 
 ## Completion Checklist
 
-- [ ] `ZoomPolicy` implemented and unit-tested.
-- [ ] Pinch detector emits semantic zoom events.
-- [ ] Camera zoom is clamped and applied.
-- [ ] Zoom indicator implemented.
-- [ ] Physical-device pinch validation completed.
+- [x] `ZoomPolicy` implemented and unit-tested.
+- [x] Compose transform detector applies multiplicative pinch zoom; no tap/freeze action is attached in Feature 03.
+- [x] Camera zoom is clamped to CameraX bounds and applied asynchronously.
+- [x] Zoom indicator displays CameraX-reported zoom state.
+- [x] Superseded CameraX zoom requests are ignored rather than reported as camera failures.
+- [ ] Physical-device pinch validation completed when the device is confirmed interactive and available. Do not attempt to unlock or inject touch input into a locked phone.
