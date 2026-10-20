@@ -141,6 +141,7 @@ class CameraPreviewController(context: Context) {
     fun zoomBy(
         gestureScale: Float,
         zoomState: ZoomState,
+        onZoomRequested: (Float) -> Unit,
         onError: (CameraError) -> Unit,
     ) {
         val targetRatio = try {
@@ -156,10 +157,12 @@ class CameraPreviewController(context: Context) {
 
         val control = cameraControl ?: return
         requestedZoomRatio = targetRatio
+        onZoomRequested(targetRatio)
         val zoomFuture = try {
             control.setZoomRatio(targetRatio)
         } catch (_: Exception) {
             requestedZoomRatio = zoomState.zoomRatio
+            onZoomRequested(zoomState.zoomRatio)
             onError(CameraError.ZoomFailed)
             return
         }
@@ -169,6 +172,7 @@ class CameraPreviewController(context: Context) {
             } catch (exception: Exception) {
                 if (!isSupersededZoomRequest(exception)) {
                     requestedZoomRatio = zoomState.zoomRatio
+                    onZoomRequested(zoomState.zoomRatio)
                     onError(CameraError.ZoomFailed)
                 }
             }

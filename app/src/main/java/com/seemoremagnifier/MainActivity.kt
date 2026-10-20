@@ -270,6 +270,9 @@ private fun CameraPreviewContent(
     val latestFallbackHandler = rememberUpdatedState(freezeWithLatestAnalysisFrame)
     val liveTapHandler: (Offset) -> Unit = { tapPosition ->
         if (cameraError == null && frozenFrame == null && !isCapturingStill) {
+            frozenBaseZoomRatio = savedZoomRatio
+            frozenZoomRatio = savedZoomRatio
+            frozenPanOffset = Offset.Zero
             isCapturingStill = true
             val view = previewView
             previewController.focusAndCapture(
@@ -280,8 +283,6 @@ private fun CameraPreviewContent(
                 onCaptured = { captured ->
                     frameStore.freezeLatest()?.let { if (!it.isRecycled) it.recycle() }
                     frameStore.pause()
-                    frozenBaseZoomRatio = savedZoomRatio
-                    frozenZoomRatio = savedZoomRatio
                     frozenPanOffset = Offset.Zero
                     frozenFrame = captured
                     isCapturingStill = false
@@ -349,7 +350,6 @@ private fun CameraPreviewContent(
             onBound = handleCameraBound,
             onZoomState = {
                 zoomState = it
-                savedZoomRatio = it.zoomRatio
             },
             onFrameError = onFrameError,
             onError = currentZoomErrorHandler,
@@ -367,7 +367,6 @@ private fun CameraPreviewContent(
                 onBound = handleCameraBound,
                 onZoomState = {
                     zoomState = it
-                    savedZoomRatio = it.zoomRatio
                 },
                 onFrameError = onFrameError,
                 onError = { error ->
@@ -396,7 +395,16 @@ private fun CameraPreviewContent(
                             onZoom = { scale ->
                                 if (isCapturingStill) return@detectMagnifierGestures
                                 val state = latestZoomState.value ?: return@detectMagnifierGestures
-                                previewController.zoomBy(scale, state, latestZoomErrorHandler.value)
+                                previewController.zoomBy(
+                                    gestureScale = scale,
+                                    zoomState = state,
+                                    onZoomRequested = { requestedRatio ->
+                                        if (!isCapturingStill && frozenFrame == null) {
+                                            savedZoomRatio = requestedRatio
+                                        }
+                                    },
+                                    onError = latestZoomErrorHandler.value,
+                                )
                             },
                             onTap = { latestLiveTapHandler.value(it) },
                         )
