@@ -232,7 +232,7 @@ The implementation must handle devices with no available rear camera as a camera
 
 When the user taps freeze:
 
-1. Keep the live preview and analysis running while capture is pending; show a “Focusing—hold steady” status overlay and ignore repeated taps/pinch zoom.
+1. Keep the live preview and analysis running while capture is pending; animate focus brackets converging around the tap point, show “Hold steady,” and ignore repeated taps/pinch zoom. Turn the brackets green on a confirmed focus lock, or pulse amber if focus is not confirmed before the timeout.
 2. Map the tap position through `PreviewView.meteringPointFactory` and send it to `CameraControl.startFocusAndMetering`.
 3. On focus completion or a short timeout, `ImageCapture.takePicture` captures an in-memory JPEG.
 4. Decode the still off the main thread, correct orientation, and center-crop to the preview aspect ratio. Decode sampling bounds the still to 2560 pixels per dimension.

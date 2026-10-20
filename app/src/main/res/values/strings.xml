@@ -15,6 +15,9 @@
     <string name="camera_binding_failed">The rear camera could not be started. Please retry.</string>
     <string name="camera_capture_failed">A higher-detail still could not be captured. Showing the latest preview frame instead.</string>
     <string name="camera_focusing">Focusing — hold steady…</string>
+    <string name="camera_hold_steady">Hold steady — capturing…</string>
+    <string name="camera_focus_locked">Focus locked</string>
+    <string name="camera_focus_timeout">Focus not confirmed — hold steady</string>
     <string name="camera_zoom_failed">Zoom could not be changed. Please try pinching again.</string>
     <string name="no_frame_available">The camera has not produced a frame yet. Please tap again.</string>
     <string name="frame_conversion_failed">The camera frame could not be prepared. Please try again.</string>

@@ -208,6 +208,7 @@ class CameraPreviewController(context: Context) {
         y: Float,
         previewWidth: Int,
         previewHeight: Int,
+        onFocusResult: (Boolean) -> Unit,
         onCaptured: (Bitmap) -> Unit,
         onError: (CameraError) -> Unit,
     ) {
@@ -221,6 +222,12 @@ class CameraPreviewController(context: Context) {
         }
         val captureGeneration = bindGeneration
         val captureStarted = AtomicBoolean(false)
+        val focusResultReported = AtomicBoolean(false)
+        val reportFocusResult: (Boolean) -> Unit = { focused ->
+            if (focusResultReported.compareAndSet(false, true) && captureGeneration == bindGeneration) {
+                onFocusResult(focused)
+            }
+        }
         val captureStill: () -> Unit = {
             if (captureStarted.compareAndSet(false, true) &&
                 captureGeneration == bindGeneration && imageCaptureUseCase === capture
@@ -266,6 +273,7 @@ class CameraPreviewController(context: Context) {
 
         val control = cameraControl
         if (control == null || previewWidth <= 0 || previewHeight <= 0) {
+            reportFocusResult(false)
             captureStill()
             return
         }
@@ -278,14 +286,24 @@ class CameraPreviewController(context: Context) {
                 .setAutoCancelDuration(3, TimeUnit.SECONDS)
                 .build()
             val focusFuture = control.startFocusAndMetering(action)
-            val timeout = Runnable { captureStill() }
+            val timeout = Runnable {
+                reportFocusResult(false)
+                captureStill()
+            }
             val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
             mainHandler.postDelayed(timeout, FOCUS_TIMEOUT_MS)
             focusFuture.addListener({
                 mainHandler.removeCallbacks(timeout)
+                val focused = try {
+                    focusFuture.get().isFocusSuccessful
+                } catch (_: Exception) {
+                    false
+                }
+                reportFocusResult(focused)
                 captureStill()
             }, mainExecutor)
         } catch (_: Exception) {
+            reportFocusResult(false)
             captureStill()
         }
     }

@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
@@ -45,6 +49,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.seemoremagnifier.data.camera.CameraPreviewController
@@ -243,6 +249,9 @@ private fun CameraPreviewContent(
     var frozenPanOffset by remember { mutableStateOf(Offset.Zero) }
     var frozenFrame by remember { mutableStateOf<Bitmap?>(null) }
     var isCapturingStill by remember { mutableStateOf(false) }
+    var tapFocusPosition by remember { mutableStateOf(Offset.Zero) }
+    var focusLocked by remember { mutableStateOf<Boolean?>(null) }
+    var focusAnimationKey by remember { mutableIntStateOf(0) }
     var isRebindingAfterFreeze by remember { mutableStateOf(false) }
     var zoomErrorVisible by remember { mutableStateOf(false) }
     val latestZoomState = rememberUpdatedState(zoomState)
@@ -273,6 +282,9 @@ private fun CameraPreviewContent(
             frozenBaseZoomRatio = savedZoomRatio
             frozenZoomRatio = savedZoomRatio
             frozenPanOffset = Offset.Zero
+            tapFocusPosition = tapPosition
+            focusLocked = null
+            focusAnimationKey++
             isCapturingStill = true
             val view = previewView
             previewController.focusAndCapture(
@@ -280,6 +292,7 @@ private fun CameraPreviewContent(
                 y = tapPosition.y,
                 previewWidth = view?.width ?: 0,
                 previewHeight = view?.height ?: 0,
+                onFocusResult = { focused -> focusLocked = focused },
                 onCaptured = { captured ->
                     frameStore.freezeLatest()?.let { if (!it.isRecycled) it.recycle() }
                     frameStore.pause()
@@ -412,18 +425,13 @@ private fun CameraPreviewContent(
             )
         }
         if (isCapturingStill) {
-            Surface(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Text(
-                    text = stringResource(R.string.camera_focusing),
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
+            FocusAcquisitionIndicator(
+                position = tapFocusPosition,
+                previewWidth = previewView?.width ?: 0,
+                previewHeight = previewView?.height ?: 0,
+                focusLocked = focusLocked,
+                animationKey = focusAnimationKey,
+            )
         }
         frozenFrame?.let { frame ->
             FrozenFrameContent(
@@ -510,6 +518,89 @@ private fun CameraPreviewContent(
             ) {
                 CircularProgressIndicator()
             }
+        }
+    }
+}
+
+@Composable
+private fun FocusAcquisitionIndicator(
+    position: Offset,
+    previewWidth: Int,
+    previewHeight: Int,
+    focusLocked: Boolean?,
+    animationKey: Int,
+) {
+    val convergence = remember { Animatable(0f) }
+    val pulse = remember { Animatable(0f) }
+    val density = LocalDensity.current
+
+    LaunchedEffect(animationKey) {
+        convergence.snapTo(0f)
+        convergence.animateTo(1f, animationSpec = tween(durationMillis = 560))
+    }
+    LaunchedEffect(focusLocked, animationKey) {
+        pulse.snapTo(0f)
+        if (focusLocked == false) {
+            while (true) {
+                pulse.animateTo(1f, tween(durationMillis = 680))
+                pulse.animateTo(0f, tween(durationMillis = 680))
+            }
+        }
+    }
+
+    val bracketColor = when (focusLocked) {
+        true -> Color(0xFF65E695)
+        false -> Color(0xFFFFC15A)
+        null -> Color.White
+    }
+    val outerRadius = with(density) { 68.dp.toPx() }
+    val innerRadius = with(density) { 38.dp.toPx() }
+    val radius = outerRadius + (innerRadius - outerRadius) * convergence.value + pulse.value * with(density) { 5.dp.toPx() }
+    val cornerLength = with(density) { 20.dp.toPx() }
+    val strokeWidth = with(density) { 4.dp.toPx() }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            if (previewWidth > 0 && previewHeight > 0) {
+                val center = Offset(
+                    x = position.x.coerceIn(0f, size.width),
+                    y = position.y.coerceIn(0f, size.height),
+                )
+                val alpha = if (focusLocked == false) 0.65f + pulse.value * 0.35f else 1f
+                val color = bracketColor.copy(alpha = alpha)
+                val left = center.x - radius
+                val right = center.x + radius
+                val top = center.y - radius
+                val bottom = center.y + radius
+
+                drawLine(color, Offset(left, top), Offset(left + cornerLength, top), strokeWidth)
+                drawLine(color, Offset(left, top), Offset(left, top + cornerLength), strokeWidth)
+                drawLine(color, Offset(right, top), Offset(right - cornerLength, top), strokeWidth)
+                drawLine(color, Offset(right, top), Offset(right, top + cornerLength), strokeWidth)
+                drawLine(color, Offset(left, bottom), Offset(left + cornerLength, bottom), strokeWidth)
+                drawLine(color, Offset(left, bottom), Offset(left, bottom - cornerLength), strokeWidth)
+                drawLine(color, Offset(right, bottom), Offset(right - cornerLength, bottom), strokeWidth)
+                drawLine(color, Offset(right, bottom), Offset(right, bottom - cornerLength), strokeWidth)
+                if (focusLocked == true) drawCircle(color, radius = with(density) { 3.dp.toPx() }, center = center)
+            }
+        }
+        Surface(
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ) {
+            Text(
+                text = stringResource(
+                    when (focusLocked) {
+                        true -> R.string.camera_focus_locked
+                        false -> R.string.camera_focus_timeout
+                        null -> R.string.camera_hold_steady
+                    },
+                ),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                style = MaterialTheme.typography.titleMedium,
+            )
         }
     }
 }
