@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -60,6 +61,7 @@ import com.seemoremagnifier.domain.magnifier.FrozenPanPolicy
 import com.seemoremagnifier.ui.magnifier.CameraError
 import com.seemoremagnifier.ui.magnifier.detectMagnifierGestures
 import androidx.camera.core.ZoomState
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -532,10 +534,15 @@ private fun FocusAcquisitionIndicator(
 ) {
     val convergence = remember { Animatable(0f) }
     val pulse = remember { Animatable(0f) }
+    val screenFlash = remember { Animatable(0f) }
     val density = LocalDensity.current
 
     LaunchedEffect(animationKey) {
         convergence.snapTo(0f)
+        screenFlash.snapTo(0.42f)
+        launch {
+            screenFlash.animateTo(0f, animationSpec = tween(durationMillis = 760))
+        }
         convergence.animateTo(1f, animationSpec = tween(durationMillis = 560))
     }
     LaunchedEffect(focusLocked, animationKey) {
@@ -553,14 +560,18 @@ private fun FocusAcquisitionIndicator(
         false -> Color(0xFFFFC15A)
         null -> Color.White
     }
-    val outerRadius = with(density) { 68.dp.toPx() }
+    val outerRadius = with(density) { 140.dp.toPx() }
     val innerRadius = with(density) { 38.dp.toPx() }
     val radius = outerRadius + (innerRadius - outerRadius) * convergence.value + pulse.value * with(density) { 5.dp.toPx() }
     val cornerLength = with(density) { 20.dp.toPx() }
     val strokeWidth = with(density) { 4.dp.toPx() }
+    val haloWidth = with(density) { 10.dp.toPx() }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
+            if (screenFlash.value > 0f) {
+                drawRect(Color.White.copy(alpha = screenFlash.value))
+            }
             if (previewWidth > 0 && previewHeight > 0) {
                 val center = Offset(
                     x = position.x.coerceIn(0f, size.width),
@@ -573,14 +584,14 @@ private fun FocusAcquisitionIndicator(
                 val top = center.y - radius
                 val bottom = center.y + radius
 
-                drawLine(color, Offset(left, top), Offset(left + cornerLength, top), strokeWidth)
-                drawLine(color, Offset(left, top), Offset(left, top + cornerLength), strokeWidth)
-                drawLine(color, Offset(right, top), Offset(right - cornerLength, top), strokeWidth)
-                drawLine(color, Offset(right, top), Offset(right, top + cornerLength), strokeWidth)
-                drawLine(color, Offset(left, bottom), Offset(left + cornerLength, bottom), strokeWidth)
-                drawLine(color, Offset(left, bottom), Offset(left, bottom - cornerLength), strokeWidth)
-                drawLine(color, Offset(right, bottom), Offset(right - cornerLength, bottom), strokeWidth)
-                drawLine(color, Offset(right, bottom), Offset(right, bottom - cornerLength), strokeWidth)
+                drawOutlinedFocusLine(color, Offset(left, top), Offset(left + cornerLength, top), strokeWidth, haloWidth)
+                drawOutlinedFocusLine(color, Offset(left, top), Offset(left, top + cornerLength), strokeWidth, haloWidth)
+                drawOutlinedFocusLine(color, Offset(right, top), Offset(right - cornerLength, top), strokeWidth, haloWidth)
+                drawOutlinedFocusLine(color, Offset(right, top), Offset(right, top + cornerLength), strokeWidth, haloWidth)
+                drawOutlinedFocusLine(color, Offset(left, bottom), Offset(left + cornerLength, bottom), strokeWidth, haloWidth)
+                drawOutlinedFocusLine(color, Offset(left, bottom), Offset(left, bottom - cornerLength), strokeWidth, haloWidth)
+                drawOutlinedFocusLine(color, Offset(right, bottom), Offset(right - cornerLength, bottom), strokeWidth, haloWidth)
+                drawOutlinedFocusLine(color, Offset(right, bottom), Offset(right, bottom - cornerLength), strokeWidth, haloWidth)
                 if (focusLocked == true) drawCircle(color, radius = with(density) { 3.dp.toPx() }, center = center)
             }
         }
@@ -603,6 +614,17 @@ private fun FocusAcquisitionIndicator(
             )
         }
     }
+}
+
+private fun DrawScope.drawOutlinedFocusLine(
+    color: Color,
+    start: Offset,
+    end: Offset,
+    strokeWidth: Float,
+    haloWidth: Float,
+) {
+    drawLine(Color.Black.copy(alpha = 0.84f), start, end, haloWidth)
+    drawLine(color, start, end, strokeWidth)
 }
 
 @Composable
