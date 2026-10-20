@@ -19,4 +19,6 @@
     <string name="frame_allocation_failed">There is not enough memory to freeze this frame. Please try again.</string>
     <string name="frozen_status">Frozen</string>
     <string name="tap_to_resume">Tap anywhere to resume the live view</string>
+    <string name="resume_live_view">Resume live view</string>
+    <string name="camera_rebinding">Resuming live camera…</string>
 </resources>

@@ -101,7 +101,6 @@ internal fun MagnifierPermissionScreen() {
     var cameraError by remember { mutableStateOf<CameraError?>(null) }
     var frameError by remember { mutableStateOf<CameraError?>(null) }
     var retryToken by remember { mutableStateOf(0) }
-    var frozenFrame by remember { mutableStateOf<Bitmap?>(null) }
 
     LaunchedEffect(frameError) {
         if (frameError != null) {
@@ -157,33 +156,13 @@ internal fun MagnifierPermissionScreen() {
     }
 
     when {
-        frozenFrame != null -> {
-            FrozenFrameContent(
-                frame = frozenFrame!!,
-                onResume = {
-                    frozenFrame?.recycle()
-                    frozenFrame = null
-                    cameraError = null
-                    retryToken++
-                },
-            )
-        }
         permissionGranted -> {
             CameraPreviewContent(
                 retryToken = retryToken,
                 frameError = frameError,
-                onFreeze = {
-                    val captured = it
-                    if (captured == null) {
-                        frameError = CameraError.NoFrameAvailable
-                    } else {
-                        cameraError = null
-                        retryToken++
-                        frozenFrame = captured
-                    }
-                },
                 onFrameError = { frameError = it },
                 onCameraError = { cameraError = it },
+                onCameraReady = { cameraError = null },
                 onRetry = {
                     cameraError = null
                     retryToken++
@@ -237,11 +216,11 @@ internal fun MagnifierPermissionScreen() {
 @Composable
 private fun CameraPreviewContent(
     retryToken: Int,
-    onFreeze: (Bitmap?) -> Unit,
     frameError: CameraError?,
     onFrameError: (CameraError) -> Unit,
     cameraError: CameraError?,
     onCameraError: (CameraError) -> Unit,
+    onCameraReady: () -> Unit,
     onRetry: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -250,10 +229,17 @@ private fun CameraPreviewContent(
     val frameStore = remember { LatestFrameStore<Bitmap> { bitmap -> bitmap.recycle() } }
     var previewView by remember { mutableStateOf<androidx.camera.view.PreviewView?>(null) }
     var previewBound by remember { mutableStateOf(false) }
+    var previewStreamObserver by remember {
+        mutableStateOf<androidx.lifecycle.Observer<androidx.camera.view.PreviewView.StreamState>?>(null)
+    }
     var zoomState by remember { mutableStateOf<ZoomState?>(null) }
     var savedZoomRatio by rememberSaveable { mutableFloatStateOf(1f) }
+    var frozenFrame by remember { mutableStateOf<Bitmap?>(null) }
+    var isRebindingAfterFreeze by remember { mutableStateOf(false) }
     var zoomErrorVisible by remember { mutableStateOf(false) }
     val latestZoomState = rememberUpdatedState(zoomState)
+    val latestFrozenFrame = rememberUpdatedState(frozenFrame)
+    val latestPreviewView = rememberUpdatedState(previewView)
     val currentZoomErrorHandler: (CameraError) -> Unit = { error ->
         if (error == CameraError.ZoomFailed) {
             zoomErrorVisible = true
@@ -271,8 +257,41 @@ private fun CameraPreviewContent(
     }
     DisposableEffect(previewController) {
         onDispose {
+            previewStreamObserver?.let { observer ->
+                latestPreviewView.value?.previewStreamState?.removeObserver(observer)
+            }
             previewController.shutdown()
             frameStore.close()
+            latestFrozenFrame.value?.let { if (!it.isRecycled) it.recycle() }
+        }
+    }
+
+    val finishCameraResume = {
+        frozenFrame?.let { if (!it.isRecycled) it.recycle() }
+        frozenFrame = null
+        frameStore.resume()
+        isRebindingAfterFreeze = false
+        onCameraReady()
+    }
+
+    val handleCameraBound = {
+        previewBound = true
+        val view = previewView
+        if (frozenFrame == null || view == null) {
+            finishCameraResume()
+        } else {
+            previewStreamObserver?.let(view.previewStreamState::removeObserver)
+            val observer = object : androidx.lifecycle.Observer<androidx.camera.view.PreviewView.StreamState> {
+                override fun onChanged(value: androidx.camera.view.PreviewView.StreamState) {
+                    if (value == androidx.camera.view.PreviewView.StreamState.STREAMING) {
+                        view.previewStreamState.removeObserver(this)
+                        previewStreamObserver = null
+                        finishCameraResume()
+                    }
+                }
+            }
+            previewStreamObserver = observer
+            view.previewStreamState.observe(lifecycleOwner, observer)
         }
     }
 
@@ -284,7 +303,7 @@ private fun CameraPreviewContent(
             previewView = view,
             requestedZoomRatio = savedZoomRatio,
             frameStore = frameStore,
-            onBound = { previewBound = true },
+            onBound = handleCameraBound,
             onZoomState = {
                 zoomState = it
                 savedZoomRatio = it.zoomRatio
@@ -299,7 +318,7 @@ private fun CameraPreviewContent(
             modifier = Modifier.fillMaxSize(),
             onPreviewViewCreated = { previewView = it },
         )
-        if (cameraError == null && previewBound) {
+        if (frozenFrame == null && cameraError == null && previewBound) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -316,11 +335,52 @@ private fun CameraPreviewContent(
                         }
                     }
                     .pointerInput(frameStore) {
-                        detectTapGestures { onFreeze(frameStore.freezeLatest()) }
+                        if (frozenFrame == null) {
+                            detectTapGestures {
+                                val latest = frameStore.freezeLatest()
+                                if (latest == null) {
+                                    onFrameError(CameraError.NoFrameAvailable)
+                                } else {
+                                    frozenFrame = latest
+                                    previewController.unbind()
+                                }
+                            }
+                        }
                     },
             )
         }
-        zoomState?.let { currentZoom ->
+        frozenFrame?.let { frame ->
+            FrozenFrameContent(
+                frame = frame,
+                isRebinding = isRebindingAfterFreeze,
+                rebindError = cameraError,
+                onResume = {
+                    if (isRebindingAfterFreeze) return@FrozenFrameContent
+                    frameStore.pause()
+                    onCameraReady()
+                    isRebindingAfterFreeze = true
+                    previewBound = false
+                    previewController.rebind(
+                        requestedZoomRatio = savedZoomRatio,
+                        onBound = handleCameraBound,
+                        onZoomState = {
+                            zoomState = it
+                            savedZoomRatio = it.zoomRatio
+                        },
+                        onFrameError = onFrameError,
+                        onError = { error ->
+                            previewStreamObserver?.let { observer ->
+                                previewView?.previewStreamState?.removeObserver(observer)
+                                previewStreamObserver = null
+                            }
+                            isRebindingAfterFreeze = false
+                            onCameraError(error)
+                        },
+                    )
+                },
+            )
+        }
+        if (frozenFrame == null) zoomState?.let { currentZoom ->
             ZoomIndicator(
                 zoomRatio = currentZoom.zoomRatio,
                 modifier = Modifier
@@ -349,7 +409,7 @@ private fun CameraPreviewContent(
             )
         }
         when {
-            cameraError != null -> {
+            cameraError != null && frozenFrame == null -> {
                 PermissionMessage(
                     title = stringResource(R.string.camera_unavailable_title),
                     message = stringResource(cameraError.messageRes),
@@ -373,16 +433,17 @@ private fun CameraPreviewContent(
 @Composable
 private fun FrozenFrameContent(
     frame: Bitmap,
+    isRebinding: Boolean,
+    rebindError: CameraError?,
     onResume: () -> Unit,
 ) {
-    DisposableEffect(frame) {
-        onDispose { if (!frame.isRecycled) frame.recycle() }
-    }
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(frame) {
-                detectTapGestures(onTap = { onResume() })
+            .pointerInput(frame, isRebinding, rebindError) {
+                if (rebindError == null && !isRebinding) {
+                    detectTapGestures(onTap = { onResume() })
+                }
             },
     ) {
         androidx.compose.foundation.Image(
@@ -406,13 +467,37 @@ private fun FrozenFrameContent(
             )
         }
         Text(
-            text = stringResource(R.string.tap_to_resume),
+            text = when {
+                isRebinding -> stringResource(R.string.camera_rebinding)
+                rebindError != null -> stringResource(rebindError.messageRes)
+                else -> stringResource(R.string.tap_to_resume)
+            },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 32.dp),
             color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.bodyLarge,
         )
+        if (rebindError != null) {
+            Button(
+                onClick = onResume,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 84.dp),
+            ) {
+                Text(stringResource(R.string.retry_camera))
+            }
+        } else {
+            Button(
+                onClick = onResume,
+                enabled = !isRebinding,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 84.dp),
+            ) {
+                Text(stringResource(R.string.resume_live_view))
+            }
+        }
     }
 }
 

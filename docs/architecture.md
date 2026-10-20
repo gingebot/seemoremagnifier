@@ -235,15 +235,15 @@ When the user taps freeze:
 1. The ViewModel requests the latest candidate frame.
 2. If no frame is available, it remains live and presents a transient freeze-failure message.
 3. If a frame is available, ownership transfers to the frozen state.
-4. Camera analysis and preview use cases are unbound to reduce battery use and stop camera access while frozen.
+4. The frozen UI remains mounted while the camera controller unbinds preview and analysis use cases to stop camera access while frozen.
 5. The frozen frame is displayed with UI scaling/cropping.
 
 When the user unfreezes:
 
-1. The frozen frame is released.
-2. The camera use cases are rebound.
-3. The app returns to `Live` only after binding succeeds.
-4. A rebind failure produces `Error` with a retry action.
+1. Keep the frozen frame visible and pause the candidate-frame store.
+2. Rebind preview and analysis, preserving the current zoom request subject to the new camera bounds.
+3. On successful binding, release the frozen frame, resume candidate analysis, and return to `Live`.
+4. On rebind failure, retain the frozen frame and present a retry action; do not claim the app is live.
 
 ### 6.3 Zoom
 

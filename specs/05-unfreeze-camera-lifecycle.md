@@ -21,19 +21,21 @@ Resume the live camera safely after a frozen frame, while releasing camera and i
 
 ## Requirements
 
-1. The app does not claim to be live until camera binding succeeds.
-2. Camera use cases are stopped while frozen.
-3. The frozen frame is released exactly once when ownership ends.
-4. Unfreeze never accesses the frozen image through the camera.
-5. A rebind failure does not discard useful error information.
-6. Process recreation does not attempt to restore an in-memory frozen bitmap.
-7. Camera resources are released when the screen is no longer visible.
+1. The frozen frame remains visible during unfreeze and until the preview reports its stream is `STREAMING`.
+2. The app does not claim to be live until camera binding succeeds.
+3. Camera use cases are stopped while frozen.
+4. The frozen frame is released exactly once after a successful unfreeze or when its owner is destroyed.
+5. Unfreeze never accesses the frozen image through the camera.
+6. A rebind failure retains the frozen frame and exposes a retry action.
+7. Process recreation does not attempt to restore an in-memory frozen bitmap.
+8. Camera resources are released when the screen is no longer visible.
 
 ## Acceptance Criteria
 
-- Freezing stops camera access.
-- Unfreezing releases the frozen frame and restores live preview.
-- Rebind failure presents a retry action and does not show a false live state.
+- Freezing stops camera access while preserving the frozen frame display.
+- Unfreezing rebinds camera use cases and only releases the frozen frame after preview streaming starts, preventing a blank transition.
+- Rebind failure retains the frozen frame, presents a retry action, and does not show a false live state.
+- Frozen mode exposes an explicit accessible resume button and does not display the live zoom badge over the frozen status.
 - Repeated freeze/unfreeze cycles do not accumulate bitmaps or camera bindings.
 - Backgrounding and foregrounding are safe in both live and frozen modes.
 
@@ -55,8 +57,8 @@ Resume the live camera safely after a frozen frame, while releasing camera and i
 
 ## Completion Checklist
 
-- [ ] Frozen-state camera unbinding implemented.
-- [ ] Unfreeze rebind implemented.
-- [ ] Frame and camera cleanup is centralized and idempotent.
-- [ ] Retryable rebind error implemented.
-- [ ] Lifecycle and repeated-cycle validation completed.
+- [x] Frozen-state camera unbinding implemented.
+- [x] Unfreeze rebind implemented; frozen image remains visible until binding succeeds.
+- [x] Frame and camera cleanup is centralized and idempotent.
+- [x] Retryable rebind error implemented without claiming live state.
+- [ ] Physical lifecycle and repeated-cycle validation deferred: connected device reports `Dozing`; no unlock or touch input was attempted.

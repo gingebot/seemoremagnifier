@@ -32,6 +32,12 @@ class LatestFrameStore<T>(private val release: (T) -> Unit) {
     }
 
     @Synchronized
+    fun pause() {
+        if (closed) return
+        paused = true
+    }
+
+    @Synchronized
     fun isPaused(): Boolean = paused || closed
 
     @Synchronized

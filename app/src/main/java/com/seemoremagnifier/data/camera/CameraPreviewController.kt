@@ -180,8 +180,7 @@ class CameraPreviewController(context: Context) {
     fun unbind() {
         bindGeneration++
         val useCases = listOfNotNull(previewUseCase, analysisUseCase).toTypedArray()
-        if (useCases.isEmpty()) return
-        cameraProvider?.unbind(*useCases)
+        if (useCases.isNotEmpty()) cameraProvider?.unbind(*useCases)
         previewUseCase = null
         analysisUseCase = null
         cameraControl = null

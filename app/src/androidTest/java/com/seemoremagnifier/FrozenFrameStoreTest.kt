@@ -49,4 +49,37 @@ class FrozenFrameStoreTest {
         store.close()
         candidate.recycle()
     }
+
+    @Test
+    fun storeCanResumeAfterSuccessfulCameraRebindAndFreezeAgain() {
+        val store = LatestFrameStore<Bitmap> { it.recycle() }
+        val first = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        store.offer(first)
+        assertTrue(store.freezeLatest() === first)
+        assertTrue(store.isPaused())
+
+        store.resume()
+        assertFalse(store.isPaused())
+        val second = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        store.offer(second)
+        assertTrue(store.freezeLatest() === second)
+
+        store.close()
+        first.recycle()
+        second.recycle()
+    }
+
+    @Test
+    fun closingStoreReleasesCandidateAndPreventsFurtherResume() {
+        val store = LatestFrameStore<Bitmap> { it.recycle() }
+        val candidate = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        store.offer(candidate)
+
+        store.close()
+        store.resume()
+
+        assertTrue(candidate.isRecycled)
+        assertTrue(store.isPaused())
+        assertNull(store.freezeLatest())
+    }
 }
