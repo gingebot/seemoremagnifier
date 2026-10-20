@@ -41,6 +41,7 @@ Capture and display the most recently available camera frame when the user taps 
 - Repeated freeze attempts do not leak frame memory.
 - Conversion and allocation failures are user-presentable and nonfatal.
 - Successful still capture provides more detail than the capped analysis fallback on supported devices.
+- Frozen images can be panned with one finger when magnified, without exposing blank areas or resuming the camera.
 - Freeze latency is acceptable on the connected device.
 
 ## Tests and Device Validation

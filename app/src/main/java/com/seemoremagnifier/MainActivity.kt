@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.seemoremagnifier.data.camera.CameraPreviewController
 import com.seemoremagnifier.data.frame.LatestFrameStore
 import com.seemoremagnifier.domain.magnifier.ZoomPolicy
+import com.seemoremagnifier.domain.magnifier.FrozenPanPolicy
 import com.seemoremagnifier.ui.magnifier.CameraError
 import com.seemoremagnifier.ui.magnifier.detectMagnifierGestures
 import androidx.camera.core.ZoomState
@@ -239,6 +240,7 @@ private fun CameraPreviewContent(
     var savedZoomRatio by rememberSaveable { mutableFloatStateOf(1f) }
     var frozenZoomRatio by remember { mutableFloatStateOf(1f) }
     var frozenBaseZoomRatio by remember { mutableFloatStateOf(1f) }
+    var frozenPanOffset by remember { mutableStateOf(Offset.Zero) }
     var frozenFrame by remember { mutableStateOf<Bitmap?>(null) }
     var isCapturingStill by remember { mutableStateOf(false) }
     var isRebindingAfterFreeze by remember { mutableStateOf(false) }
@@ -258,6 +260,7 @@ private fun CameraPreviewContent(
         } else {
             frozenBaseZoomRatio = savedZoomRatio
             frozenZoomRatio = savedZoomRatio
+            frozenPanOffset = Offset.Zero
             frozenFrame = fallback
             isCapturingStill = false
             previewController.unbind()
@@ -279,6 +282,7 @@ private fun CameraPreviewContent(
                     frameStore.pause()
                     frozenBaseZoomRatio = savedZoomRatio
                     frozenZoomRatio = savedZoomRatio
+                    frozenPanOffset = Offset.Zero
                     frozenFrame = captured
                     isCapturingStill = false
                     previewController.unbind()
@@ -418,6 +422,7 @@ private fun CameraPreviewContent(
                 frame = frame,
                 zoomRatio = frozenZoomRatio,
                 baseZoomRatio = frozenBaseZoomRatio,
+                panOffset = frozenPanOffset,
                 isRebinding = isRebindingAfterFreeze,
                 isCapturingStill = isCapturingStill,
                 rebindError = cameraError,
@@ -432,6 +437,24 @@ private fun CameraPreviewContent(
                     )
                     frozenZoomRatio = ratio
                     savedZoomRatio = ratio
+                    frozenPanOffset = FrozenPanPolicy.clamp(
+                        offset = frozenPanOffset,
+                        viewportWidth = previewView?.width ?: 0,
+                        viewportHeight = previewView?.height ?: 0,
+                        imageWidth = frame.width,
+                        imageHeight = frame.height,
+                        scale = (ratio / frozenBaseZoomRatio).coerceAtLeast(1f),
+                    )
+                },
+                onPan = { delta ->
+                    frozenPanOffset = FrozenPanPolicy.clamp(
+                        offset = frozenPanOffset + delta,
+                        viewportWidth = previewView?.width ?: 0,
+                        viewportHeight = previewView?.height ?: 0,
+                        imageWidth = frame.width,
+                        imageHeight = frame.height,
+                        scale = (frozenZoomRatio / frozenBaseZoomRatio).coerceAtLeast(1f),
+                    )
                 },
                 onResume = { resumeFrozenFrame() },
             )
@@ -488,13 +511,16 @@ private fun FrozenFrameContent(
     frame: Bitmap,
     zoomRatio: Float,
     baseZoomRatio: Float,
+    panOffset: Offset,
     isRebinding: Boolean,
     isCapturingStill: Boolean,
     rebindError: CameraError?,
     onZoom: (Float) -> Unit,
+    onPan: (Offset) -> Unit,
     onResume: () -> Unit,
 ) {
     val latestOnZoom = rememberUpdatedState(onZoom)
+    val latestOnPan = rememberUpdatedState(onPan)
     val latestOnResume = rememberUpdatedState(onResume)
     Box(
         modifier = Modifier
@@ -504,6 +530,9 @@ private fun FrozenFrameContent(
                 detectMagnifierGestures(
                     onZoom = { scale ->
                         if (!isRebinding && !isCapturingStill && rebindError == null) latestOnZoom.value(scale)
+                    },
+                    onPan = { delta ->
+                        if (!isRebinding && !isCapturingStill && rebindError == null) latestOnPan.value(delta)
                     },
                     onTap = {
                         if (!isRebinding && !isCapturingStill && rebindError == null) latestOnResume.value()
@@ -518,6 +547,8 @@ private fun FrozenFrameContent(
                 val relativeZoom = (zoomRatio / baseZoomRatio).coerceAtLeast(1f)
                 scaleX = relativeZoom
                 scaleY = relativeZoom
+                translationX = panOffset.x
+                translationY = panOffset.y
             },
             contentScale = androidx.compose.ui.layout.ContentScale.Fit,
         )

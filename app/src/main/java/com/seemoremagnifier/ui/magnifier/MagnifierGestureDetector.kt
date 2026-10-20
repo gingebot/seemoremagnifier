@@ -12,11 +12,15 @@ import kotlin.math.hypot
 internal suspend fun PointerInputScope.detectMagnifierGestures(
     onTap: (Offset) -> Unit,
     onZoom: (Float) -> Unit,
+    onPan: (Offset) -> Unit = {},
 ) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         val tapTracker = GestureTapTracker(viewConfiguration.touchSlop)
         var previousSpan = 0f
+        var previousPosition = down.position
+        var hadMultiplePointers = false
+        var wasPanning = false
 
         while (true) {
             val event = awaitPointerEvent(PointerEventPass.Main)
@@ -37,6 +41,20 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
                 (primary.position.y - down.position.y).toDouble(),
             ).toFloat()
             tapTracker.observe(pressed.size, movement)
+
+            if (pressed.size > 1) {
+                hadMultiplePointers = true
+                wasPanning = false
+            } else if (!hadMultiplePointers && movement > viewConfiguration.touchSlop) {
+                val panDelta = if (wasPanning) {
+                    primary.position - previousPosition
+                } else {
+                    primary.position - down.position
+                }
+                if (panDelta != Offset.Zero) onPan(panDelta)
+                wasPanning = true
+            }
+            previousPosition = primary.position
 
             if (pressed.size > 1 || movement > viewConfiguration.touchSlop) {
                 pressed.forEach { it.consume() }
