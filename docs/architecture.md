@@ -251,7 +251,7 @@ In `Live`, pinch input is converted to a clamped zoom ratio and applied through 
 
 Zoom uses multiplicative gesture scale (`newRatio = currentRatio × gestureScale`), clamped to `ZoomState.minZoomRatio..maxZoomRatio`. The indicator displays the latest CameraX-reported `zoomRatio`, formatted to one decimal place. Pinch gestures may issue a newer zoom command before an earlier `setZoomRatio` future completes; CameraX cancellation of a superseded request is expected and must not be surfaced as a camera error or interrupt preview.
 
-In `Frozen`, the same logical zoom ratio is applied through a crop/scale transform to the frozen frame. The frozen image must not be re-read from the camera.
+In `Frozen`, the same logical zoom ratio is applied through a clipped scale transform to the frozen frame, relative to the zoom ratio at capture. Frozen zoom is clamped to the capture ratio and the camera's maximum, so scaling cannot reveal empty regions beyond the captured image. The latest logical ratio is restored to CameraX on resume. The frozen image must not be re-read from the camera.
 
 Pinch input must not generate a tap. A gesture detector must cancel a pending tap when movement exceeds the tap threshold or multiple pointers are detected.
 
@@ -265,7 +265,7 @@ The UI uses Compose pointer input to recognize semantic gestures:
 - `Pinch` becomes `ZoomGestureChanged(scale)`.
 - Live pinch scales the requested camera zoom; a one-pointer pan or a transform with no scale change is ignored.
 
-Tap and pinch recognition are coordinated in one gesture pipeline or through explicit cancellation rules. Independent overlapping `clickable` and transform detectors must not cause a pinch to freeze the image.
+Tap and pinch recognition share one pointer pipeline in both live and frozen modes. A second pointer, movement beyond Compose touch slop, or a cancelled pointer sequence permanently cancels tap eligibility for that gesture. Pinch zoom is updated from the change in average pointer span, and a tap fires only on a clean release. Independent overlapping `clickable` and transform detectors must not cause a pinch to freeze the image.
 
 Gesture behavior:
 

@@ -51,8 +51,8 @@ Make zoom available in frozen mode and ensure tap and pinch gestures behave pred
 
 ## Completion Checklist
 
-- [ ] Frozen image transform implemented.
-- [ ] Shared zoom policy used by live and frozen modes.
-- [ ] Tap/pinch cancellation rules implemented.
-- [ ] Gesture tests pass.
+- [x] Frozen image transform implemented.
+- [x] Shared zoom policy used by live and frozen modes.
+- [x] Tap/pinch cancellation rules implemented.
+- [x] Gesture tests pass.
 - [ ] Physical-device gesture validation completed.
