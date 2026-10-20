@@ -105,7 +105,7 @@ Use cases may be introduced when behavior grows, but v1 does not require a separ
 - `CameraController`: Owns CameraX provider, use-case binding, camera selection, zoom, and camera errors.
 - `CameraPreviewController`: v1 preview-only implementation that binds the rear camera and `Preview`; it must not initialize until permission is granted.
 - `CameraFrameAnalyzer`: Receives `ImageProxy` frames, converts the latest frame, and closes every proxy.
-- `FrozenFrameStore`: Owns the copied frozen frame and its cleanup.
+- `LatestFrameStore`: Owns the latest candidate frame, transfers one frame to the frozen UI, and releases replaced/expired frames.
 - `CameraPermissionManager`: Encapsulates permission status and opening the application settings page after permanent denial.
 
 The v1 permission entry point currently lives in the launcher UI. It requests camera access at first launch, explains denial, and links to application settings after permanent denial. A dedicated permission manager may be extracted when permission behavior is reused.
@@ -131,8 +131,7 @@ com.seemoremagnifier/
       CameraController.kt
       CameraFrameAnalyzer.kt
     frame/
-      FrozenFrame.kt
-      FrozenFrameStore.kt
+      LatestFrameStore.kt
     permissions/
       CameraPermissionManager.kt
 ```
@@ -164,7 +163,7 @@ sealed interface MagnifierUiState {
 }
 ```
 
-`FrozenFrame` is a domain model with explicit ownership and cleanup rather than an unbounded raw `Bitmap` field exposed throughout the UI.
+`FrozenFrame` is a domain model with explicit ownership and cleanup rather than an unbounded raw `Bitmap` field exposed throughout the UI. The current implementation uses `LatestFrameStore<Bitmap>` for the candidate frame and transfers ownership to the frozen UI.
 
 ### 5.2 Events
 
@@ -228,7 +227,7 @@ V1 uses `ImageAnalysis`, not `ImageCapture`, because the required behavior is to
 1. Receives an `ImageProxy` on a background executor.
 2. Converts the newest frame from YUV to a displayable representation, applying rotation metadata.
 3. Applies the same rear-camera orientation and preview crop rules used by the UI; it does not mirror the frame.
-4. Replaces the previous candidate frame in `FrozenFrameStore`.
+4. Replaces the previous candidate frame in `LatestFrameStore`.
 5. Closes every `ImageProxy`, including error paths.
 
 When the user taps freeze:
@@ -324,7 +323,7 @@ Only one candidate frame and one frozen frame may be retained. The implementatio
 - Release the candidate frame on replacement, unfreeze, stop, and error.
 - Handle bitmap allocation failure as a user-visible freeze error rather than crashing.
 
-`FrozenFrameStore` owns cleanup so that UI code does not need to manage bitmap lifetime directly.
+`LatestFrameStore` owns candidate cleanup so that analyzer and UI code do not manage the same bitmap concurrently.
 
 ### 9.3 Privacy
 

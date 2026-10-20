@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -16,8 +17,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -41,9 +43,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.seemoremagnifier.data.camera.CameraPreviewController
+import com.seemoremagnifier.data.frame.LatestFrameStore
 import com.seemoremagnifier.ui.magnifier.CameraError
 import androidx.camera.core.ZoomState
 
@@ -95,7 +99,16 @@ internal fun MagnifierPermissionScreen() {
         )
     }
     var cameraError by remember { mutableStateOf<CameraError?>(null) }
+    var frameError by remember { mutableStateOf<CameraError?>(null) }
     var retryToken by remember { mutableStateOf(0) }
+    var frozenFrame by remember { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(frameError) {
+        if (frameError != null) {
+            kotlinx.coroutines.delay(2_500)
+            frameError = null
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -144,9 +157,32 @@ internal fun MagnifierPermissionScreen() {
     }
 
     when {
+        frozenFrame != null -> {
+            FrozenFrameContent(
+                frame = frozenFrame!!,
+                onResume = {
+                    frozenFrame?.recycle()
+                    frozenFrame = null
+                    cameraError = null
+                    retryToken++
+                },
+            )
+        }
         permissionGranted -> {
             CameraPreviewContent(
                 retryToken = retryToken,
+                frameError = frameError,
+                onFreeze = {
+                    val captured = it
+                    if (captured == null) {
+                        frameError = CameraError.NoFrameAvailable
+                    } else {
+                        cameraError = null
+                        retryToken++
+                        frozenFrame = captured
+                    }
+                },
+                onFrameError = { frameError = it },
                 onCameraError = { cameraError = it },
                 onRetry = {
                     cameraError = null
@@ -201,6 +237,9 @@ internal fun MagnifierPermissionScreen() {
 @Composable
 private fun CameraPreviewContent(
     retryToken: Int,
+    onFreeze: (Bitmap?) -> Unit,
+    frameError: CameraError?,
+    onFrameError: (CameraError) -> Unit,
     cameraError: CameraError?,
     onCameraError: (CameraError) -> Unit,
     onRetry: () -> Unit,
@@ -208,6 +247,7 @@ private fun CameraPreviewContent(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewController = remember(context) { CameraPreviewController(context) }
+    val frameStore = remember { LatestFrameStore<Bitmap> { bitmap -> bitmap.recycle() } }
     var previewView by remember { mutableStateOf<androidx.camera.view.PreviewView?>(null) }
     var previewBound by remember { mutableStateOf(false) }
     var zoomState by remember { mutableStateOf<ZoomState?>(null) }
@@ -229,9 +269,11 @@ private fun CameraPreviewContent(
             zoomErrorVisible = false
         }
     }
-
     DisposableEffect(previewController) {
-        onDispose { previewController.unbind() }
+        onDispose {
+            previewController.shutdown()
+            frameStore.close()
+        }
     }
 
     LaunchedEffect(previewView, lifecycleOwner, retryToken) {
@@ -241,11 +283,13 @@ private fun CameraPreviewContent(
             lifecycleOwner = lifecycleOwner,
             previewView = view,
             requestedZoomRatio = savedZoomRatio,
+            frameStore = frameStore,
             onBound = { previewBound = true },
             onZoomState = {
                 zoomState = it
                 savedZoomRatio = it.zoomRatio
             },
+            onFrameError = onFrameError,
             onError = currentZoomErrorHandler,
         )
     }
@@ -260,19 +304,19 @@ private fun CameraPreviewContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .pointerInput(previewController) {
-                        detectTransformGestures { _, _, zoomChange, _ ->
-                            val currentZoomState = latestZoomState.value
-                                ?: return@detectTransformGestures
-                            if (zoomChange.isFinite() && zoomChange > 0f &&
-                                kotlin.math.abs(zoomChange - 1f) > 0.001f
-                            ) {
+                        detectTransformGestures { _, _, zoom, _ ->
+                            val state = latestZoomState.value ?: return@detectTransformGestures
+                            if (zoom.isFinite() && zoom > 0f && kotlin.math.abs(zoom - 1f) > 0.001f) {
                                 previewController.zoomBy(
-                                    zoomChange,
-                                    currentZoomState,
+                                    zoom,
+                                    state,
                                     latestZoomErrorHandler.value,
                                 )
                             }
                         }
+                    }
+                    .pointerInput(frameStore) {
+                        detectTapGestures { onFreeze(frameStore.freezeLatest()) }
                     },
             )
         }
@@ -290,6 +334,16 @@ private fun CameraPreviewContent(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 32.dp),
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        frameError?.let { error ->
+            Text(
+                text = stringResource(error.messageRes),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = if (zoomErrorVisible) 64.dp else 32.dp),
                 color = MaterialTheme.colorScheme.onErrorContainer,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -313,6 +367,52 @@ private fun CameraPreviewContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FrozenFrameContent(
+    frame: Bitmap,
+    onResume: () -> Unit,
+) {
+    DisposableEffect(frame) {
+        onDispose { if (!frame.isRecycled) frame.recycle() }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(frame) {
+                detectTapGestures(onTap = { onResume() })
+            },
+    ) {
+        androidx.compose.foundation.Image(
+            bitmap = frame.asImageBitmap(),
+            contentDescription = stringResource(R.string.frozen_status),
+            modifier = Modifier.fillMaxSize(),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+        )
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 56.dp),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ) {
+            Text(
+                text = stringResource(R.string.frozen_status),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+        Text(
+            text = stringResource(R.string.tap_to_resume),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 32.dp),
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyLarge,
+        )
     }
 }
 

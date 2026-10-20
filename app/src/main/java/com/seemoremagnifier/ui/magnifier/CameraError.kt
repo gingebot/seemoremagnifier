@@ -9,4 +9,7 @@ enum class CameraError(@param:StringRes val messageRes: Int) {
     InitializationFailed(R.string.camera_initialization_failed),
     BindingFailed(R.string.camera_binding_failed),
     ZoomFailed(R.string.camera_zoom_failed),
+    NoFrameAvailable(R.string.no_frame_available),
+    FrameConversionFailed(R.string.frame_conversion_failed),
+    FrameAllocationFailed(R.string.frame_allocation_failed),
 }

@@ -6,14 +6,20 @@ import android.content.pm.PackageManager
 import android.view.Surface
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.CameraControl
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.core.ZoomState
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import android.graphics.Bitmap
 import com.seemoremagnifier.domain.magnifier.ZoomPolicy
+import com.seemoremagnifier.data.frame.LatestFrameStore
 import com.seemoremagnifier.ui.magnifier.CameraError
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.Executor
 import java.util.concurrent.CancellationException
 import java.util.concurrent.ExecutionException
@@ -24,16 +30,23 @@ class CameraPreviewController(context: Context) {
     private val mainExecutor: Executor = ContextCompat.getMainExecutor(appContext)
     private var cameraProvider: ProcessCameraProvider? = null
     private var previewUseCase: Preview? = null
+    private var analysisUseCase: ImageAnalysis? = null
     private var cameraControl: androidx.camera.core.CameraControl? = null
     private var requestedZoomRatio: Float? = null
     private var bindGeneration = 0
+    private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private var activeLifecycleOwner: LifecycleOwner? = null
+    private var activePreviewView: PreviewView? = null
+    private var activeFrameStore: LatestFrameStore<Bitmap>? = null
 
     fun bind(
         lifecycleOwner: LifecycleOwner,
         previewView: PreviewView,
         requestedZoomRatio: Float,
+        frameStore: LatestFrameStore<Bitmap>,
         onBound: () -> Unit,
         onZoomState: (ZoomState) -> Unit,
+        onFrameError: (CameraError) -> Unit,
         onError: (CameraError) -> Unit,
     ) {
         val generation = ++bindGeneration
@@ -61,17 +74,30 @@ class CameraPreviewController(context: Context) {
                     return@addListener
                 }
 
-                previewUseCase?.let { provider.unbind(it) }
+                val oldUseCases = listOfNotNull(previewUseCase, analysisUseCase)
+                if (oldUseCases.isNotEmpty()) provider.unbind(*oldUseCases.toTypedArray())
 
                 val preview = Preview.Builder()
                     .setTargetRotation(previewView.display?.rotation ?: Surface.ROTATION_0)
                     .build()
                     .also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
-                val camera = provider.bindToLifecycle(lifecycleOwner, selector, preview)
+                val analysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setTargetRotation(previewView.display?.rotation ?: Surface.ROTATION_0)
+                    .build()
+                analysis.setAnalyzer(analysisExecutor) { image ->
+                    analyzeFrame(image, previewView, frameStore, onFrameError)
+                }
+
+                val camera = provider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
                 cameraProvider = provider
                 previewUseCase = preview
+                analysisUseCase = analysis
                 cameraControl = camera.cameraControl
+                activeLifecycleOwner = lifecycleOwner
+                activePreviewView = previewView
+                activeFrameStore = frameStore
                 camera.cameraInfo.zoomState.observe(lifecycleOwner, onZoomState)
                 val zoomState = camera.cameraInfo.zoomState.value
                 if (zoomState != null) {
@@ -153,11 +179,65 @@ class CameraPreviewController(context: Context) {
 
     fun unbind() {
         bindGeneration++
-        val preview = previewUseCase ?: return
-        cameraProvider?.unbind(preview)
+        val useCases = listOfNotNull(previewUseCase, analysisUseCase).toTypedArray()
+        if (useCases.isEmpty()) return
+        cameraProvider?.unbind(*useCases)
         previewUseCase = null
+        analysisUseCase = null
         cameraControl = null
-        requestedZoomRatio = null
+    }
+
+    fun rebind(
+        requestedZoomRatio: Float,
+        onBound: () -> Unit,
+        onZoomState: (ZoomState) -> Unit,
+        onFrameError: (CameraError) -> Unit,
+        onError: (CameraError) -> Unit,
+    ) {
+        val owner = activeLifecycleOwner ?: run {
+            onError(CameraError.BindingFailed)
+            return
+        }
+        val view = activePreviewView ?: run {
+            onError(CameraError.BindingFailed)
+            return
+        }
+        val store = activeFrameStore ?: run {
+            onError(CameraError.BindingFailed)
+            return
+        }
+        bind(owner, view, requestedZoomRatio, store, onBound, onZoomState, onFrameError, onError)
+    }
+
+    fun shutdown() {
+        unbind()
+        activeLifecycleOwner = null
+        activePreviewView = null
+        activeFrameStore = null
         cameraProvider = null
+        requestedZoomRatio = null
+        analysisExecutor.shutdown()
+    }
+
+    private fun analyzeFrame(
+        image: ImageProxy,
+        previewView: PreviewView,
+        frameStore: LatestFrameStore<Bitmap>,
+        onFrameError: (CameraError) -> Unit,
+    ) {
+        try {
+            if (frameStore.isPaused()) return
+            val width = previewView.width
+            val height = previewView.height
+            if (width <= 0 || height <= 0) return
+            val bitmap = AnalysisFrameConverter.convert(image, width, height)
+            frameStore.offer(bitmap)
+        } catch (_: OutOfMemoryError) {
+            onFrameError(CameraError.FrameAllocationFailed)
+        } catch (_: Exception) {
+            onFrameError(CameraError.FrameConversionFailed)
+        } finally {
+            image.close()
+        }
     }
 }

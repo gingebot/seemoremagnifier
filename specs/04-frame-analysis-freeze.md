@@ -17,7 +17,7 @@ Capture and display the most recently available camera frame when the user taps 
 - Implement `CameraFrameAnalyzer` on a background executor.
 - Convert YUV frames to a bounded displayable frame.
 - Apply rotation and preview crop rules without mirroring the rear-camera image.
-- Store only the latest candidate frame.
+- Store only the latest candidate frame in `LatestFrameStore`.
 - Freeze the candidate frame on tap.
 - Handle missing frames and conversion/allocation errors.
 
@@ -56,8 +56,9 @@ Capture and display the most recently available camera frame when the user taps 
 
 ## Completion Checklist
 
-- [ ] `ImageAnalysis` is bound with latest-frame backpressure.
-- [ ] Analyzer closes every proxy.
-- [ ] Frame conversion is backgrounded and bounded.
-- [ ] Frozen frame displays with correct orientation and crop.
-- [ ] Failure paths and cleanup are tested.
+- [x] `ImageAnalysis` is bound with latest-frame backpressure.
+- [x] Analyzer closes every proxy.
+- [x] Frame conversion is backgrounded and bounded.
+- [x] Frozen frame displays with rear-camera orientation and crop.
+- [x] Candidate ownership and cleanup paths are unit-tested.
+- [ ] Physical-device freeze latency and repeated freeze/unfreeze validation remains deferred if the device is locked or non-interactive. The current device install is ready, but permission is currently reset to denied by test cleanup.

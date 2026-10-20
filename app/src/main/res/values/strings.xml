@@ -14,4 +14,9 @@
     <string name="camera_initialization_failed">The camera could not be initialized. Check that no other app is using it, then retry.</string>
     <string name="camera_binding_failed">The rear camera could not be started. Please retry.</string>
     <string name="camera_zoom_failed">Zoom could not be changed. Please try pinching again.</string>
+    <string name="no_frame_available">The camera has not produced a frame yet. Please tap again.</string>
+    <string name="frame_conversion_failed">The camera frame could not be prepared. Please try again.</string>
+    <string name="frame_allocation_failed">There is not enough memory to freeze this frame. Please try again.</string>
+    <string name="frozen_status">Frozen</string>
+    <string name="tap_to_resume">Tap anywhere to resume the live view</string>
 </resources>
