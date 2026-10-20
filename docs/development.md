@@ -38,6 +38,7 @@ The initial Android project uses this pinned version set:
 | Compose BOM | 2026.06.01 |
 | AndroidX Activity Compose | 1.13.0 |
 | AndroidX Lifecycle | 2.10.0 |
+| AndroidX Lifecycle Compose | 2.10.0 |
 | CameraX | 1.6.2 |
 | AndroidX Core KTX | 1.17.0 |
 | Coroutines Android | 1.10.2 |
@@ -97,7 +98,7 @@ For every change:
 3. For camera, UI, lifecycle, or accessibility changes, install the debug build on a physical device.
 4. Record any device-specific findings or limitations in the relevant issue or test report.
 
-The connected physical device is particularly important for camera behavior, front-camera mirroring, aspect ratio, gesture interaction, lifecycle transitions, and accessibility behavior.
+The connected physical device is particularly important for rear-camera behavior, aspect ratio, gesture interaction, lifecycle transitions, and accessibility behavior.
 
 ## 5. Release Policy
 

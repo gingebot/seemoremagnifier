@@ -1,24 +1,44 @@
 package com.seemoremagnifier
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.seemoremagnifier.data.camera.CameraPreviewController
+import com.seemoremagnifier.ui.magnifier.CameraError
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,7 +50,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    FoundationScreen()
+                    MagnifierPermissionScreen()
                 }
             }
         }
@@ -38,32 +58,243 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun FoundationScreen() {
+internal fun MagnifierPermissionScreen() {
+    val context = LocalContext.current
+    val activity = context as? ComponentActivity
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val permissionPreferences = remember(context) {
+        context.getSharedPreferences("camera_permission", Context.MODE_PRIVATE)
+    }
+
+    var permissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    var hasRequestedPermission by remember {
+        mutableStateOf(permissionPreferences.getBoolean("requested", false))
+    }
+    var showPermissionExplanation by remember(permissionGranted) {
+        mutableStateOf(!permissionGranted && permissionPreferences.getBoolean("requested", false))
+    }
+    var permissionPermanentlyDenied by remember(permissionGranted) {
+        mutableStateOf(
+            !permissionGranted &&
+                permissionPreferences.getBoolean("requested", false) &&
+                activity?.let {
+                    !it.shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)
+                } == true,
+        )
+    }
+    var cameraError by remember { mutableStateOf<CameraError?>(null) }
+    var retryToken by remember { mutableStateOf(0) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        hasRequestedPermission = true
+        permissionGranted = granted
+        showPermissionExplanation = !granted
+        permissionPermanentlyDenied = !granted && hasRequestedPermission &&
+            activity?.let { !it.shouldShowRequestPermissionRationale(Manifest.permission.CAMERA) } == true
+        cameraError = null
+    }
+
+    // Re-check permission when returning from the system settings screen.
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val isGranted = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.CAMERA,
+                ) == PackageManager.PERMISSION_GRANTED
+                permissionGranted = isGranted
+                if (isGranted) {
+                    cameraError = null
+                } else if (hasRequestedPermission) {
+                    showPermissionExplanation = true
+                    permissionPermanentlyDenied = activity?.let {
+                        !it.shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)
+                    } == true
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(permissionGranted, showPermissionExplanation) {
+        if (permissionGranted) cameraError = null
+    }
+
+    LaunchedEffect(hasRequestedPermission, permissionGranted) {
+        if (!permissionGranted && !hasRequestedPermission) {
+            permissionPreferences.edit().putBoolean("requested", true).apply()
+            hasRequestedPermission = true
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    when {
+        permissionGranted -> {
+            CameraPreviewContent(
+                retryToken = retryToken,
+                onCameraError = { cameraError = it },
+                onRetry = {
+                    cameraError = null
+                    retryToken++
+                },
+                cameraError = cameraError,
+            )
+        }
+
+        showPermissionExplanation -> {
+            PermissionMessage(
+                title = stringResource(R.string.camera_permission_title),
+                message = stringResource(R.string.camera_permission_rationale),
+                actionLabel = if (permissionPermanentlyDenied) {
+                    stringResource(R.string.open_app_settings)
+                } else {
+                    stringResource(R.string.retry_permission)
+                },
+                onAction = {
+                    if (permissionPermanentlyDenied) {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null),
+                            ),
+                        )
+                    } else {
+                        permissionPreferences.edit().putBoolean("requested", true).apply()
+                        permissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
+                },
+            )
+        }
+
+        else -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    CircularProgressIndicator()
+                    Text(stringResource(R.string.camera_permission_initial_message))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraPreviewContent(
+    retryToken: Int,
+    cameraError: CameraError?,
+    onCameraError: (CameraError) -> Unit,
+    onRetry: () -> Unit,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val previewController = remember(context) { CameraPreviewController(context) }
+    var previewView by remember { mutableStateOf<androidx.camera.view.PreviewView?>(null) }
+    var previewBound by remember { mutableStateOf(false) }
+
+    DisposableEffect(previewController) {
+        onDispose { previewController.unbind() }
+    }
+
+    LaunchedEffect(previewView, lifecycleOwner, retryToken) {
+        val view = previewView ?: return@LaunchedEffect
+        previewBound = false
+        previewController.bind(
+            lifecycleOwner = lifecycleOwner,
+            previewView = view,
+            onBound = { previewBound = true },
+            onError = onCameraError,
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        AndroidCameraPreview(
+            modifier = Modifier.fillMaxSize(),
+            onPreviewViewCreated = { previewView = it },
+        )
+        when {
+            cameraError != null -> {
+                PermissionMessage(
+                    title = stringResource(R.string.camera_unavailable_title),
+                    message = stringResource(cameraError.messageRes),
+                    actionLabel = stringResource(R.string.retry_camera),
+                    onAction = onRetry,
+                )
+            }
+
+            !previewBound -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AndroidCameraPreview(
+    modifier: Modifier = Modifier,
+    onPreviewViewCreated: (androidx.camera.view.PreviewView) -> Unit,
+) {
+    androidx.compose.ui.viewinterop.AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            androidx.camera.view.PreviewView(context).apply {
+                scaleType = androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
+                implementationMode = androidx.camera.view.PreviewView.ImplementationMode.PERFORMANCE
+                contentDescription = context.getString(R.string.live_camera_preview_description)
+                onPreviewViewCreated(this)
+            }
+        },
+        update = { onPreviewViewCreated(it) },
+    )
+}
+
+@Composable
+internal fun PermissionMessage(
+    title: String,
+    message: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.headlineMedium,
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center,
         )
         Text(
-            text = "SeeMoreMagnifier is ready",
-            modifier = Modifier.padding(top = 12.dp),
-            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp),
+            text = message,
+            modifier = Modifier.padding(top = 16.dp),
+            style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
         )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun FoundationScreenPreview() {
-    MaterialTheme {
-        FoundationScreen()
+        Button(
+            onClick = onAction,
+            modifier = Modifier.padding(top = 24.dp),
+        ) {
+            Text(actionLabel)
+        }
     }
 }

@@ -47,7 +47,7 @@ Cover at least:
 On a representative physical device, verify:
 
 - Camera permission grant, denial, and permanent denial behavior.
-- Front-camera preview startup and front-camera mirroring.
+- Rear-camera preview startup and confirmation that neither live nor frozen content is mirrored.
 - Pinch zoom in live and frozen modes.
 - Tap-to-freeze and tap-to-unfreeze.
 - Camera shutdown while frozen and camera rebind after unfreezing.
@@ -71,7 +71,7 @@ Before release, test on at least:
 The coverage should include:
 
 - Portrait and landscape rotation.
-- Different front-camera aspect ratios.
+- Different rear-camera aspect ratios.
 - App background/foreground transitions.
 - Low-memory conditions.
 - A device or emulator with camera access unavailable.

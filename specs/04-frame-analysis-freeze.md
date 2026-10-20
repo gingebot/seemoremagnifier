@@ -16,7 +16,7 @@ Capture and display the most recently available camera frame when the user taps 
 - Use `STRATEGY_KEEP_ONLY_LATEST`.
 - Implement `CameraFrameAnalyzer` on a background executor.
 - Convert YUV frames to a bounded displayable frame.
-- Apply rotation, front-camera mirroring, and preview crop rules.
+- Apply rotation and preview crop rules without mirroring the rear-camera image.
 - Store only the latest candidate frame.
 - Freeze the candidate frame on tap.
 - Handle missing frames and conversion/allocation errors.

@@ -1,3 +1,16 @@
 <resources>
     <string name="app_name">SeeMoreMagnifier</string>
+    <string name="live_camera_preview_description">Live rear camera preview</string>
+    <string name="camera_permission_title">Camera access needed</string>
+    <string name="camera_permission_initial_message">SeeMoreMagnifier uses the rear camera to show a live magnified view. Camera access is only used while the live view is active.</string>
+    <string name="camera_permission_rationale">Camera permission is required to show the live magnifier. You can grant access now or change it later in app settings.</string>
+    <string name="grant_camera_permission">Allow camera</string>
+    <string name="retry_permission">Try permission again</string>
+    <string name="open_app_settings">Open app settings</string>
+    <string name="camera_unavailable_title">Camera unavailable</string>
+    <string name="retry_camera">Retry camera</string>
+    <string name="camera_permission_missing">Camera permission is needed to start the preview.</string>
+    <string name="rear_camera_unavailable">This device does not have an available rear-facing camera.</string>
+    <string name="camera_initialization_failed">The camera could not be initialized. Check that no other app is using it, then retry.</string>
+    <string name="camera_binding_failed">The rear camera could not be started. Please retry.</string>
 </resources>

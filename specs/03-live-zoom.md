@@ -2,7 +2,7 @@
 
 ## Objective
 
-Allow users to pinch-zoom the live front-camera preview with bounded, stable zoom behavior.
+Allow users to pinch-zoom the live rear-camera preview with bounded, stable zoom behavior.
 
 ## Dependencies
 

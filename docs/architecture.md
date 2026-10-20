@@ -4,11 +4,11 @@
 
 App Name: SeeMoreMagnifier  
 Platform: Android  
-Primary Use Case: Low-vision magnifier using the front camera with simple, reliable gestures.
+Primary Use Case: Low-vision magnifier using the rear camera with simple, reliable gestures.
 
 Core behaviors:
 
-- Request camera permission and start a full-screen live front-camera preview.
+- Request camera permission and start a full-screen live rear-camera preview.
 - Pinch to zoom the live preview.
 - Tap anywhere on the content to freeze the most recently available frame.
 - Tap anywhere on the frozen image to resume the live preview.
@@ -34,7 +34,7 @@ The v1 implementation prioritizes a responsive representation of the visible pre
 
 - No saving or sharing images.
 - No filters, OCR, or ML.
-- No rear camera or torch.
+- No front camera or torch.
 - No multi-screen navigation.
 - No custom image library or gallery.
 - No persistence of the frozen frame across process death.
@@ -55,14 +55,14 @@ The v1 implementation prioritizes a responsive representation of the visible pre
 
 ### 3.2 Platform decisions
 
-- The app targets Android phones and tablets with a front-facing camera.
+- The app targets Android phones and tablets with a rear-facing camera.
 - Minimum SDK: 26; compile SDK: 36; target SDK: 36. These values are also recorded with the pinned toolchain in [`development.md`](development.md).
 - The application ID and namespace are `com.seemoremagnifier`.
 - Portrait and landscape are supported unless usability testing establishes that portrait-only operation is preferable.
 - The UI uses edge-to-edge layout with camera content behind system bars where appropriate.
 - The app keeps the display awake while a live preview is active and does not force the display to remain awake while frozen.
 - System font scale, display scaling, touch exploration, and other system accessibility settings are respected.
-- The preview is mirrored consistently with the selected front-camera UX. The frozen frame must use the same mirror orientation as the preview.
+- The rear-camera preview and frozen frame are not mirrored. The frozen frame must preserve the preview's orientation and crop.
 
 ### 3.3 Permission
 
@@ -103,9 +103,12 @@ Use cases may be introduced when behavior grows, but v1 does not require a separ
 #### Data/platform layer
 
 - `CameraController`: Owns CameraX provider, use-case binding, camera selection, zoom, and camera errors.
+- `CameraPreviewController`: v1 preview-only implementation that binds the rear camera and `Preview`; it must not initialize until permission is granted.
 - `CameraFrameAnalyzer`: Receives `ImageProxy` frames, converts the latest frame, and closes every proxy.
 - `FrozenFrameStore`: Owns the copied frozen frame and its cleanup.
 - `CameraPermissionManager`: Encapsulates permission status and opening the application settings page after permanent denial.
+
+The v1 permission entry point currently lives in the launcher UI. It requests camera access at first launch, explains denial, and links to application settings after permanent denial. A dedicated permission manager may be extracted when permission behavior is reused.
 
 ### 4.2 Package structure
 
@@ -200,17 +203,20 @@ The current zoom ratio is preserved when transitioning between `Live` and `Froze
 - `Preview` for the visible live camera stream.
 - `ImageAnalysis` for the latest frame used by freeze.
 
-The controller uses `CameraSelector.DEFAULT_FRONT_CAMERA` and binds to the screen's lifecycle owner. It reports camera initialization, binding, zoom, and runtime failures as domain events.
+The controller uses `CameraSelector.DEFAULT_BACK_CAMERA` and binds to the screen's lifecycle owner. It reports camera initialization, binding, zoom, and runtime failures as domain events.
 
 The implementation must define and test the following CameraX configuration:
 
+- `PreviewView.ScaleType.FILL_CENTER` is used for the live preview; this fills the available area and center-crops where aspect ratios differ.
+- Preview target rotation is initialized from the `PreviewView` display rotation. Activity recreation on orientation change rebinds with the new display rotation.
+- The rear-camera preview is not mirrored; no software mirror transform is applied in v1.
 - `ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST` backpressure.
 - Explicit target rotation based on the current display rotation.
 - A preview and analysis resolution strategy appropriate for the display, rather than always retaining the camera's maximum resolution.
 - A `PreviewView` scale type whose crop behavior is documented and shared by the frozen-frame transformation.
-- Consistent front-camera mirroring between live and frozen display.
+- Consistent rear-camera orientation and crop between live and frozen display; do not mirror either representation.
 
-The implementation must handle devices with no available front camera as a camera error.
+The implementation must handle devices with no available rear camera as a camera error.
 
 ### 6.2 Freeze strategy
 
@@ -220,7 +226,7 @@ V1 uses `ImageAnalysis`, not `ImageCapture`, because the required behavior is to
 
 1. Receives an `ImageProxy` on a background executor.
 2. Converts the newest frame from YUV to a displayable representation, applying rotation metadata.
-3. Applies the same front-camera mirror and preview crop rules used by the UI.
+3. Applies the same rear-camera orientation and preview crop rules used by the UI; it does not mirror the frame.
 4. Replaces the previous candidate frame in `FrozenFrameStore`.
 5. Closes every `ImageProxy`, including error paths.
 
@@ -363,7 +369,7 @@ All `ImageProxy` instances must be closed in success and failure paths. Internal
 
 ## 12. Future Extensions
 
-- Rear camera and torch.
+- Front camera and torch.
 - Brightness/contrast sliders.
 - Edge enhancement filters.
 - Saving/sharing frozen frames using `ImageCapture` or an export pipeline.
