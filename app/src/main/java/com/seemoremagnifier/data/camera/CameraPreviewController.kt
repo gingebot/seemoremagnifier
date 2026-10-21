@@ -97,7 +97,7 @@ class CameraPreviewController(context: Context) {
                 }
 
                 val imageCapture = ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                     .setTargetRotation(previewView.display?.rotation ?: Surface.ROTATION_0)
                     .build()
 
