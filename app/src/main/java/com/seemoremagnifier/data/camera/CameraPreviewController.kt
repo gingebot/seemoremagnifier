@@ -203,7 +203,8 @@ class CameraPreviewController(context: Context) {
         cameraControl = null
     }
 
-    fun focusAndCapture(
+    internal fun focusAndCapture(
+        trace: FreezeTiming.Trace,
         x: Float,
         y: Float,
         previewWidth: Int,
@@ -212,11 +213,14 @@ class CameraPreviewController(context: Context) {
         onCaptured: (Bitmap) -> Unit,
         onError: (CameraError) -> Unit,
     ) {
+        FreezeTiming.mark(trace, "controller-start")
         val capture = imageCaptureUseCase ?: run {
+            FreezeTiming.mark(trace, "capture-use-case-missing")
             onError(CameraError.CaptureFailed)
             return
         }
         val preview = activePreviewView ?: run {
+            FreezeTiming.mark(trace, "preview-missing")
             onError(CameraError.CaptureFailed)
             return
         }
@@ -225,6 +229,7 @@ class CameraPreviewController(context: Context) {
         val focusResultReported = AtomicBoolean(false)
         val reportFocusResult: (Boolean) -> Unit = { focused ->
             if (focusResultReported.compareAndSet(false, true) && captureGeneration == bindGeneration) {
+                FreezeTiming.mark(trace, "focus-result focused=$focused")
                 onFocusResult(focused)
             }
         }
@@ -233,22 +238,40 @@ class CameraPreviewController(context: Context) {
                 captureGeneration == bindGeneration && imageCaptureUseCase === capture
             ) {
                 try {
+                    FreezeTiming.mark(trace, "still-capture-start")
                     capture.takePicture(analysisExecutor, object : ImageCapture.OnImageCapturedCallback() {
                         override fun onCaptureSuccess(image: ImageProxy) {
                             try {
+                                FreezeTiming.mark(trace, "still-callback")
+                                val decodeStartedAtNs = if (trace.id != 0L) {
+                                    android.os.SystemClock.elapsedRealtimeNanos()
+                                } else {
+                                    0L
+                                }
                                 val bitmap = AnalysisFrameConverter.convertStill(image, previewWidth, previewHeight)
+                                if (trace.id != 0L) {
+                                    FreezeTiming.mark(
+                                        trace,
+                                        "decode-complete decodeMs=${FreezeTiming.elapsedMsSince(decodeStartedAtNs)} " +
+                                            "size=${bitmap.width}x${bitmap.height}",
+                                    )
+                                }
                                 mainExecutor.execute {
                                     if (captureGeneration == bindGeneration && imageCaptureUseCase === capture) {
+                                        FreezeTiming.mark(trace, "captured-delivered-to-ui")
                                         onCaptured(bitmap)
                                     } else {
+                                        FreezeTiming.mark(trace, "captured-discarded-stale")
                                         bitmap.recycle()
                                     }
                                 }
                             } catch (_: OutOfMemoryError) {
+                                FreezeTiming.mark(trace, "decode-error out-of-memory")
                                 mainExecutor.execute {
                                     if (captureGeneration == bindGeneration) onError(CameraError.FrameAllocationFailed)
                                 }
                             } catch (_: Exception) {
+                                FreezeTiming.mark(trace, "decode-error exception")
                                 mainExecutor.execute {
                                     if (captureGeneration == bindGeneration) onError(CameraError.CaptureFailed)
                                 }
@@ -258,12 +281,14 @@ class CameraPreviewController(context: Context) {
                         }
 
                         override fun onError(exception: ImageCaptureException) {
+                            FreezeTiming.mark(trace, "still-capture-error")
                             mainExecutor.execute {
                                 if (captureGeneration == bindGeneration) onError(CameraError.CaptureFailed)
                             }
                         }
                     })
                 } catch (_: Exception) {
+                    FreezeTiming.mark(trace, "still-capture-request-error")
                     mainExecutor.execute {
                         if (captureGeneration == bindGeneration) onError(CameraError.CaptureFailed)
                     }
@@ -273,6 +298,7 @@ class CameraPreviewController(context: Context) {
 
         val control = cameraControl
         if (control == null || previewWidth <= 0 || previewHeight <= 0) {
+            FreezeTiming.mark(trace, "focus-skipped controlOrDimensionsUnavailable")
             reportFocusResult(false)
             captureStill()
             return
@@ -286,7 +312,9 @@ class CameraPreviewController(context: Context) {
                 .setAutoCancelDuration(3, TimeUnit.SECONDS)
                 .build()
             val focusFuture = control.startFocusAndMetering(action)
+            FreezeTiming.mark(trace, "focus-requested")
             val timeout = Runnable {
+                FreezeTiming.mark(trace, "focus-timeout")
                 reportFocusResult(false)
                 captureStill()
             }
@@ -303,6 +331,7 @@ class CameraPreviewController(context: Context) {
                 captureStill()
             }, mainExecutor)
         } catch (_: Exception) {
+            FreezeTiming.mark(trace, "focus-request-error")
             reportFocusResult(false)
             captureStill()
         }

@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -55,6 +56,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.seemoremagnifier.data.camera.CameraPreviewController
+import com.seemoremagnifier.data.camera.FreezeTiming
 import com.seemoremagnifier.data.frame.LatestFrameStore
 import com.seemoremagnifier.domain.magnifier.ZoomPolicy
 import com.seemoremagnifier.domain.magnifier.FrozenPanPolicy
@@ -250,6 +252,7 @@ private fun CameraPreviewContent(
     var frozenBaseZoomRatio by remember { mutableFloatStateOf(1f) }
     var frozenPanOffset by remember { mutableStateOf(Offset.Zero) }
     var frozenFrame by remember { mutableStateOf<Bitmap?>(null) }
+    var frozenFrameTrace by remember { mutableStateOf<FreezeTiming.Trace?>(null) }
     var isCapturingStill by remember { mutableStateOf(false) }
     var tapFocusPosition by remember { mutableStateOf(Offset.Zero) }
     var focusLocked by remember { mutableStateOf<Boolean?>(null) }
@@ -279,8 +282,16 @@ private fun CameraPreviewContent(
         }
     }
     val latestFallbackHandler = rememberUpdatedState(freezeWithLatestAnalysisFrame)
+    LaunchedEffect(frozenFrame, frozenFrameTrace) {
+        val trace = frozenFrameTrace
+        if (frozenFrame != null && trace != null) {
+            withFrameNanos { }
+            FreezeTiming.mark(trace, "frozen-frame-next-compose-frame")
+        }
+    }
     val liveTapHandler: (Offset) -> Unit = { tapPosition ->
         if (cameraError == null && frozenFrame == null && !isCapturingStill) {
+            val trace = FreezeTiming.start()
             frozenBaseZoomRatio = savedZoomRatio
             frozenZoomRatio = savedZoomRatio
             frozenPanOffset = Offset.Zero
@@ -290,20 +301,33 @@ private fun CameraPreviewContent(
             isCapturingStill = true
             val view = previewView
             previewController.focusAndCapture(
+                trace = trace,
                 x = tapPosition.x,
                 y = tapPosition.y,
                 previewWidth = view?.width ?: 0,
                 previewHeight = view?.height ?: 0,
-                onFocusResult = { focused -> focusLocked = focused },
+                onFocusResult = { focused ->
+                    FreezeTiming.mark(trace, "focus-result-ui focused=$focused")
+                    focusLocked = focused
+                },
                 onCaptured = { captured ->
                     frameStore.freezeLatest()?.let { if (!it.isRecycled) it.recycle() }
                     frameStore.pause()
                     frozenPanOffset = Offset.Zero
                     frozenFrame = captured
+                    frozenFrameTrace = trace
                     isCapturingStill = false
                     previewController.unbind()
+                    FreezeTiming.mark(trace, "frozen-frame-state-set size=${captured.width}x${captured.height}")
                 },
-                onError = { error -> latestFallbackHandler.value(error) },
+                onError = { error ->
+                    FreezeTiming.mark(trace, "capture-error fallback=$error")
+                    latestFallbackHandler.value(error)
+                    if (frozenFrame != null) {
+                        frozenFrameTrace = trace
+                        FreezeTiming.mark(trace, "fallback-frame-state-set")
+                    }
+                },
             )
         }
     }
