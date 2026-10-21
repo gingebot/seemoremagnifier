@@ -34,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -65,6 +66,7 @@ import com.seemoremagnifier.ui.magnifier.CameraError
 import com.seemoremagnifier.ui.magnifier.detectMagnifierGestures
 import androidx.camera.core.ZoomState
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -252,6 +254,8 @@ private fun CameraPreviewContent(
     var frozenZoomRatio by remember { mutableFloatStateOf(1f) }
     var frozenBaseZoomRatio by remember { mutableFloatStateOf(1f) }
     var frozenPanOffset by remember { mutableStateOf(Offset.Zero) }
+    val scope = rememberCoroutineScope()
+    var frozenPanFlingJob by remember { mutableStateOf<Job?>(null) }
     var frozenFrame by remember { mutableStateOf<Bitmap?>(null) }
     var frozenFrameTrace by remember { mutableStateOf<FreezeTiming.Trace?>(null) }
     var isCapturingStill by remember { mutableStateOf(false) }
@@ -267,6 +271,12 @@ private fun CameraPreviewContent(
         if (error == CameraError.ZoomFailed) zoomErrorVisible = true else onCameraError(error)
     }
     val latestZoomErrorHandler = rememberUpdatedState(currentZoomErrorHandler)
+    LaunchedEffect(frozenFrame, isRebindingAfterFreeze, isCapturingStill, cameraError) {
+        if (frozenFrame == null || isRebindingAfterFreeze || isCapturingStill || cameraError != null) {
+            frozenPanFlingJob?.cancel()
+            frozenPanFlingJob = null
+        }
+    }
     val freezeWithLatestAnalysisFrame: (CameraError) -> Unit = { error ->
         val fallback = frameStore.freezeLatest()
         if (fallback == null) {
@@ -481,6 +491,8 @@ private fun CameraPreviewContent(
                     )
                     frozenZoomRatio = ratio
                     savedZoomRatio = ratio
+                    frozenPanFlingJob?.cancel()
+                    frozenPanFlingJob = null
                     frozenPanOffset = FrozenPanPolicy.clamp(
                         offset = frozenPanOffset,
                         viewportWidth = previewView?.width ?: 0,
@@ -491,6 +503,8 @@ private fun CameraPreviewContent(
                     )
                 },
                 onPan = { delta ->
+                    frozenPanFlingJob?.cancel()
+                    frozenPanFlingJob = null
                     frozenPanOffset = FrozenPanPolicy.clamp(
                         offset = frozenPanOffset + delta,
                         viewportWidth = previewView?.width ?: 0,
@@ -499,6 +513,44 @@ private fun CameraPreviewContent(
                         imageHeight = frame.height,
                         scale = (frozenZoomRatio / frozenBaseZoomRatio).coerceAtLeast(1f),
                     )
+                },
+                onPanFling = { velocity ->
+                    frozenPanFlingJob?.cancel()
+                    frozenPanFlingJob = null
+                    if (FrozenPanPolicy.shouldFling(velocity) &&
+                        !isRebindingAfterFreeze && !isCapturingStill && cameraError == null
+                    ) {
+                        frozenPanFlingJob = scope.launch {
+                            val initialOffset = frozenPanOffset
+                            var startTimeNanos = 0L
+                            while (true) {
+                                val frameTimeNanos = withFrameNanos { it }
+                                if (startTimeNanos == 0L) startTimeNanos = frameTimeNanos
+                                val elapsedMillis = (frameTimeNanos - startTimeNanos) / 1_000_000L
+                                val proposed = FrozenPanPolicy.flingOffset(
+                                    start = initialOffset,
+                                    velocity = velocity,
+                                    elapsedMillis = elapsedMillis,
+                                )
+                                val bounded = FrozenPanPolicy.clamp(
+                                    offset = proposed,
+                                    viewportWidth = previewView?.width ?: 0,
+                                    viewportHeight = previewView?.height ?: 0,
+                                    imageWidth = frame.width,
+                                    imageHeight = frame.height,
+                                    scale = (frozenZoomRatio / frozenBaseZoomRatio).coerceAtLeast(1f),
+                                )
+                                frozenPanOffset = bounded
+                                if (bounded != proposed || elapsedMillis >= FrozenPanPolicy.FLING_DURATION_MILLIS) {
+                                    break
+                                }
+                            }
+                        }
+                    }
+                },
+                onGestureStart = {
+                    frozenPanFlingJob?.cancel()
+                    frozenPanFlingJob = null
                 },
                 onResume = { resumeFrozenFrame() },
             )
@@ -667,10 +719,14 @@ private fun FrozenFrameContent(
     rebindError: CameraError?,
     onZoom: (Float) -> Unit,
     onPan: (Offset) -> Unit,
+    onPanFling: (Offset) -> Unit,
+    onGestureStart: () -> Unit,
     onResume: () -> Unit,
 ) {
     val latestOnZoom = rememberUpdatedState(onZoom)
     val latestOnPan = rememberUpdatedState(onPan)
+    val latestOnPanFling = rememberUpdatedState(onPanFling)
+    val latestOnGestureStart = rememberUpdatedState(onGestureStart)
     val latestOnResume = rememberUpdatedState(onResume)
     Box(
         modifier = Modifier
@@ -684,6 +740,12 @@ private fun FrozenFrameContent(
                     onPan = { delta ->
                         if (!isRebinding && !isCapturingStill && rebindError == null) latestOnPan.value(delta)
                     },
+                    onPanFling = { velocity ->
+                        if (!isRebinding && !isCapturingStill && rebindError == null) {
+                            latestOnPanFling.value(velocity)
+                        }
+                    },
+                    onGestureStart = { latestOnGestureStart.value() },
                     onTap = {
                         if (!isRebinding && !isCapturingStill && rebindError == null) latestOnResume.value()
                     },

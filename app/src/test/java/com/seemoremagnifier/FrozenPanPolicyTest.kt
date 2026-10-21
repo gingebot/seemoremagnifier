@@ -3,9 +3,34 @@ package com.seemoremagnifier
 import androidx.compose.ui.geometry.Offset
 import com.seemoremagnifier.domain.magnifier.FrozenPanPolicy
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FrozenPanPolicyTest {
+    @Test
+    fun flingRequiresFiniteVelocityAboveThresholdOnEitherAxis() {
+        assertTrue(FrozenPanPolicy.shouldFling(Offset(100f, 0f)))
+        assertTrue(FrozenPanPolicy.shouldFling(Offset(0f, -250f)))
+        assertFalse(FrozenPanPolicy.shouldFling(Offset(99.9f, -99.9f)))
+        assertFalse(FrozenPanPolicy.shouldFling(Offset(Float.NaN, 500f)))
+    }
+
+    @Test
+    fun flingOffsetDecaysOverTimeAndStopsAtConfiguredDuration() {
+        val start = Offset(10f, -20f)
+        val velocity = Offset(1_000f, -500f)
+        val early = FrozenPanPolicy.flingOffset(start, velocity, elapsedMillis = 200L)
+        val finished = FrozenPanPolicy.flingOffset(start, velocity, elapsedMillis = 2_000L)
+
+        assertTrue(early.x > start.x)
+        assertTrue(early.y < start.y)
+        assertEquals(
+            FrozenPanPolicy.flingOffset(start, velocity, FrozenPanPolicy.FLING_DURATION_MILLIS),
+            finished,
+        )
+    }
+
     @Test
     fun clampsPanToTheMagnifiedImageEdges() {
         val result = FrozenPanPolicy.clamp(

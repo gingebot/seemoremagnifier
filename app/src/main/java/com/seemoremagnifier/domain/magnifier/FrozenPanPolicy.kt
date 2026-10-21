@@ -1,11 +1,33 @@
 package com.seemoremagnifier.domain.magnifier
 
 import androidx.compose.ui.geometry.Offset
+import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 
 /** Computes bounded translation for a fitted frozen image, using pixel dimensions. */
 object FrozenPanPolicy {
+    const val MIN_FLING_VELOCITY = 100f
+    const val FLING_DURATION_MILLIS = 700L
+    private const val FLING_DECAY_PER_SECOND = 5.0
+
+    fun shouldFling(velocity: Offset): Boolean =
+        velocity.x.isFinite() && velocity.y.isFinite() &&
+            (kotlin.math.abs(velocity.x) >= MIN_FLING_VELOCITY ||
+                kotlin.math.abs(velocity.y) >= MIN_FLING_VELOCITY)
+
+    fun flingOffset(start: Offset, velocity: Offset, elapsedMillis: Long): Offset {
+        require(start.x.isFinite() && start.y.isFinite()) { "Pan offset must be finite." }
+        require(velocity.x.isFinite() && velocity.y.isFinite()) { "Pan velocity must be finite." }
+        require(elapsedMillis >= 0L) { "Elapsed time must not be negative." }
+        val seconds = (elapsedMillis.coerceAtMost(FLING_DURATION_MILLIS)) / 1000.0
+        val distanceFactor = (1.0 - exp(-FLING_DECAY_PER_SECOND * seconds)) / FLING_DECAY_PER_SECOND
+        return Offset(
+            x = start.x + (velocity.x * distanceFactor).toFloat(),
+            y = start.y + (velocity.y * distanceFactor).toFloat(),
+        )
+    }
+
     fun clamp(
         offset: Offset,
         viewportWidth: Int,

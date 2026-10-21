@@ -15,6 +15,7 @@ Make zoom available in frozen mode and ensure tap and pinch gestures behave pred
 - Apply the logical zoom ratio to the frozen image using crop/scale transforms.
 - Preserve zoom across live-to-frozen and frozen-to-live transitions.
 - Coordinate tap and pinch recognition in one semantic gesture pipeline.
+- Track velocity for completed single-finger frozen pans and apply bounded inertial decay.
 - Define tap slop, pointer-count, and cancellation behavior.
 - Make the full content area the primary interaction target.
 
@@ -26,10 +27,12 @@ Make zoom available in frozen mode and ensure tap and pinch gestures behave pred
 4. Frozen zoom does not re-access the camera.
 5. Zoom remains clamped and consistent across both display modes.
 6. Rapid valid taps do not leave state transitions concurrent or contradictory.
+7. Frozen pan inertia starts only after a single-finger pan release, is cancelled by a new gesture or zoom, and never reveals empty image regions.
 
 ## Acceptance Criteria
 
 - Frozen image zooms smoothly with pinch.
+- A quick one-finger frozen pan continues briefly after release and stops at the image bounds.
 - A pinch never freezes or unfreezes the image accidentally.
 - A valid single tap toggles state in either mode.
 - Zoom and crop remain visually consistent when freezing and unfreezing.
@@ -45,6 +48,7 @@ Make zoom available in frozen mode and ensure tap and pinch gestures behave pred
 ## Risks and Edge Cases
 
 - Compose pointer handlers competing for the same events.
+- Fling animation continuing after a new gesture, zoom, or transition back to live mode.
 - Frozen image crop exposing invalid or empty regions.
 - Scale transform causing excessive recomposition.
 - Touch-up after a cancelled pinch being misclassified as a tap.

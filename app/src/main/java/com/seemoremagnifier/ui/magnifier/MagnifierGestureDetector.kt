@@ -6,6 +6,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import kotlin.math.hypot
 
 /** Shared, coordinated tap/pinch recognition for live preview and frozen content. */
@@ -13,10 +14,16 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
     onTap: (Offset) -> Unit,
     onZoom: (Float) -> Unit,
     onPan: (Offset) -> Unit = {},
+    onPanFling: (Offset) -> Unit = {},
+    onGestureStart: () -> Unit = {},
 ) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
+        onGestureStart()
         val tapTracker = GestureTapTracker(viewConfiguration.touchSlop)
+        val velocityTracker = VelocityTracker().apply {
+            addPosition(down.uptimeMillis, down.position)
+        }
         var previousSpan = 0f
         var previousPosition = down.position
         var hadMultiplePointers = false
@@ -26,6 +33,14 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
             val event = awaitPointerEvent(PointerEventPass.Main)
             val pressed = event.changes.filter { it.pressed }
             if (pressed.isEmpty()) {
+                val released = event.changes.firstOrNull { it.id == down.id }
+                if (event.type == PointerEventType.Release &&
+                    wasPanning && !hadMultiplePointers && released != null
+                ) {
+                    velocityTracker.addPosition(released.uptimeMillis, released.position)
+                    val velocity = velocityTracker.calculateVelocity()
+                    onPanFling(Offset(velocity.x, velocity.y))
+                }
                 if (event.type == PointerEventType.Release &&
                     tapTracker.canFinishAsTap() &&
                     event.changes.none { it.isConsumed }
@@ -36,6 +51,9 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
             }
 
             val primary = pressed.firstOrNull { it.id == down.id } ?: pressed.first()
+            if (!hadMultiplePointers && pressed.size == 1) {
+                velocityTracker.addPosition(primary.uptimeMillis, primary.position)
+            }
             val movement = hypot(
                 (primary.position.x - down.position.x).toDouble(),
                 (primary.position.y - down.position.y).toDouble(),
