@@ -296,6 +296,12 @@ class CameraPreviewController(context: Context) {
             }
         }
 
+        if (!FreezeCaptureOptions.ENABLE_TAP_POINT_FOCUS) {
+            FreezeTiming.mark(trace, "focus-skipped tapPointFocusDisabled")
+            captureStill()
+            return
+        }
+
         val control = cameraControl
         if (control == null || previewWidth <= 0 || previewHeight <= 0) {
             FreezeTiming.mark(trace, "focus-skipped controlOrDimensionsUnavailable")

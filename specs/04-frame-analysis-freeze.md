@@ -19,7 +19,11 @@ Capture and display the most recently available camera frame when the user taps 
 - Apply rotation and preview crop rules without mirroring the rear-camera image.
 - Store only the latest candidate frame in `LatestFrameStore`.
 - Freeze the candidate frame on tap.
-- Capture an in-memory high-quality still after best-effort tap-point focus/metering; retain the analysis frame as a fallback.
+- Capture an in-memory still using CameraX's latency-oriented capture mode; retain the analysis frame as a fallback.
+- By default, capture using the camera's current preview focus without requesting tap-point autofocus/metering.
+- Retain the optional tap-point focus/metering path behind `FreezeCaptureOptions.ENABLE_TAP_POINT_FOCUS`; focus brackets are shown only when this option is enabled. This is an internal development switch, not a user setting; a future options menu may expose it as a persisted preference.
+- Show a screen flash during capture; the current animation uses 80% peak opacity and a 450 ms fade.
+- Emit debug-only freeze timing traces, filterable with `adb logcat -s FreezeTiming:D`.
 - Handle missing frames and conversion/allocation errors.
 
 ## Requirements
@@ -31,7 +35,7 @@ Capture and display the most recently available camera frame when the user taps 
 5. The frozen frame matches the preview orientation and mirror behavior.
 6. Tapping before a frame is ready leaves the app live and reports a transient error.
 7. Freeze does not persist an image to shared storage.
-8. Still capture proceeds after focus completion or timeout; focus failure does not block freezing.
+8. With tap-point focus disabled, still capture starts immediately using the current camera focus. When tap-point focus is enabled, capture proceeds after focus completion or timeout; focus failure does not block freezing.
 9. The live preview remains visible until still capture completes; still-capture failure freezes the latest available analysis fallback.
 
 ## Acceptance Criteria
@@ -66,5 +70,7 @@ Capture and display the most recently available camera frame when the user taps 
 - [x] Frame conversion is backgrounded and bounded.
 - [x] Frozen frame displays with rear-camera orientation and crop.
 - [x] Candidate ownership and cleanup paths are unit-tested.
-- [x] In-memory still capture with best-effort tap-point focus and analysis fallback implemented.
-- [ ] Physical-device freeze latency and repeated freeze/unfreeze validation remains deferred if the device is locked or non-interactive. The current device install is ready, but permission is currently reset to denied by test cleanup.
+- [x] In-memory latency-oriented still capture with analysis fallback implemented.
+- [x] Optional tap-point focus path retained behind an internal switch; disabled by default.
+- [x] Physical-device freeze latency and repeated freeze/unfreeze cycles validated on the connected SM-A566B, including latency-mode capture with tap-point focus disabled.
+- [ ] Validate focus quality and latency in low light and on additional device classes before treating the current capture settings as broadly representative.

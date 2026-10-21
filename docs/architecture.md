@@ -232,11 +232,13 @@ The implementation must handle devices with no available rear camera as a camera
 
 When the user taps freeze:
 
-1. Keep the live preview and analysis running while capture is pending; animate focus brackets converging around the tap point, show “Hold steady,” and ignore repeated taps/pinch zoom. Turn the brackets green on a confirmed focus lock, or pulse amber if focus is not confirmed before the timeout.
-2. Map the tap position through `PreviewView.meteringPointFactory` and send it to `CameraControl.startFocusAndMetering`.
-3. On focus completion or a short timeout, `ImageCapture.takePicture` captures an in-memory JPEG.
-4. Decode the still off the main thread, correct orientation, and center-crop to the preview aspect ratio. Decode sampling bounds the still to 2560 pixels per dimension.
+1. Keep the live preview and analysis running while capture is pending, show a white screen flash (currently 80% peak opacity fading over 450 ms), and ignore repeated taps/pinch zoom.
+2. By default, do not request tap-point autofocus or metering: capture immediately using the camera's current focus state. This avoids waiting for a focus result and takes advantage of autofocus already running during preview.
+3. `FreezeCaptureOptions.ENABLE_TAP_POINT_FOCUS` retains the optional focus-at-tap path. When enabled, map the tap position through `PreviewView.meteringPointFactory`, call `CameraControl.startFocusAndMetering`, and capture on focus completion or after the short timeout. Focus brackets are shown only in this mode. This internal development switch can later be replaced by a persisted user preference exposed in an options menu; it is not currently a user setting.
+4. Configure `ImageCapture` with `CAPTURE_MODE_MINIMIZE_LATENCY`. Decode the still off the main thread, correct orientation, and center-crop to the preview aspect ratio. Decode sampling bounds the still to 2560 pixels per dimension. The still remains higher-resolution than the capped analysis fallback, while latency mode favors capture speed over maximum quality; validate detail on target devices.
 5. On successful still delivery, show that still as the frozen image and unbind camera use cases. On failure, freeze the latest analysis candidate instead and report the fallback notice.
+
+Debug builds include monotonic freeze timing traces for focus, still capture, decode, and frame presentation. Filter them with `adb logcat -s FreezeTiming:D`; the timing instrumentation is disabled in release builds.
 
 When the user unfreezes:
 

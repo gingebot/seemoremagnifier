@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.seemoremagnifier.data.camera.CameraPreviewController
+import com.seemoremagnifier.data.camera.FreezeCaptureOptions
 import com.seemoremagnifier.data.camera.FreezeTiming
 import com.seemoremagnifier.data.frame.LatestFrameStore
 import com.seemoremagnifier.domain.magnifier.ZoomPolicy
@@ -457,6 +458,7 @@ private fun CameraPreviewContent(
                 previewHeight = previewView?.height ?: 0,
                 focusLocked = focusLocked,
                 animationKey = focusAnimationKey,
+                showFocusBrackets = FreezeCaptureOptions.ENABLE_TAP_POINT_FOCUS,
             )
         }
         frozenFrame?.let { frame ->
@@ -555,6 +557,7 @@ private fun FocusAcquisitionIndicator(
     previewHeight: Int,
     focusLocked: Boolean?,
     animationKey: Int,
+    showFocusBrackets: Boolean,
 ) {
     val convergence = remember { Animatable(0f) }
     val pulse = remember { Animatable(0f) }
@@ -563,11 +566,13 @@ private fun FocusAcquisitionIndicator(
 
     LaunchedEffect(animationKey) {
         convergence.snapTo(0f)
-        screenFlash.snapTo(0.42f)
+        screenFlash.snapTo(0.8f)
         launch {
-            screenFlash.animateTo(0f, animationSpec = tween(durationMillis = 760))
+            screenFlash.animateTo(0f, animationSpec = tween(durationMillis = 450))
         }
-        convergence.animateTo(1f, animationSpec = tween(durationMillis = 560))
+        if (showFocusBrackets) {
+            convergence.animateTo(1f, animationSpec = tween(durationMillis = 560))
+        }
     }
     LaunchedEffect(focusLocked, animationKey) {
         pulse.snapTo(0f)
@@ -596,7 +601,7 @@ private fun FocusAcquisitionIndicator(
             if (screenFlash.value > 0f) {
                 drawRect(Color.White.copy(alpha = screenFlash.value))
             }
-            if (previewWidth > 0 && previewHeight > 0) {
+            if (showFocusBrackets && previewWidth > 0 && previewHeight > 0) {
                 val center = Offset(
                     x = position.x.coerceIn(0f, size.width),
                     y = position.y.coerceIn(0f, size.height),
