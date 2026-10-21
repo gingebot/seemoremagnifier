@@ -15,6 +15,7 @@ Make zoom available in frozen mode and ensure tap and pinch gestures behave pred
 - Apply the logical zoom ratio to the frozen image using crop/scale transforms.
 - Preserve zoom across live-to-frozen and frozen-to-live transitions.
 - Coordinate tap and pinch recognition in one semantic gesture pipeline.
+- Allow an intentional upward swipe in live mode to toggle the camera torch.
 - Track velocity for completed single-finger frozen pans and apply bounded inertial decay.
 - Define tap slop, pointer-count, and cancellation behavior.
 - Make the full content area the primary interaction target.
@@ -28,11 +29,13 @@ Make zoom available in frozen mode and ensure tap and pinch gestures behave pred
 5. Zoom remains clamped and consistent across both display modes.
 6. Rapid valid taps do not leave state transitions concurrent or contradictory.
 7. Frozen pan inertia starts only after a single-finger pan release, is cancelled by a new gesture or zoom, and never reveals empty image regions.
+8. A single-finger live swipe-up of at least 72 dp with predominantly vertical movement toggles the torch; if it was on at freeze request, it stays on through exposure, turns off while frozen, and is restored after preview resume.
 
 ## Acceptance Criteria
 
 - Frozen image zooms smoothly with pinch.
 - A quick one-finger frozen pan continues briefly after release and stops at the image bounds.
+- An upward swipe toggles the torch in live mode only and gives brief on/off or unavailable feedback.
 - A pinch never freezes or unfreezes the image accidentally.
 - A valid single tap toggles state in either mode.
 - Zoom and crop remain visually consistent when freezing and unfreezing.

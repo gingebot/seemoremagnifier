@@ -3,6 +3,7 @@ package com.seemoremagnifier.ui.magnifier
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputScope
@@ -16,6 +17,7 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
     onPan: (Offset) -> Unit = {},
     onPanFling: (Offset) -> Unit = {},
     onGestureStart: () -> Unit = {},
+    onSwipeUp: () -> Unit = {},
 ) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
@@ -34,6 +36,16 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
             val pressed = event.changes.filter { it.pressed }
             if (pressed.isEmpty()) {
                 val released = event.changes.firstOrNull { it.id == down.id }
+                if (event.type == PointerEventType.Release &&
+                    !hadMultiplePointers && released != null &&
+                    LiveGesturePolicy.isSwipeUp(
+                        start = down.position,
+                        end = released.position,
+                        minimumDistance = with(density) { 72.dp.toPx() },
+                    )
+                ) {
+                    onSwipeUp()
+                }
                 if (event.type == PointerEventType.Release &&
                     wasPanning && !hadMultiplePointers && released != null
                 ) {

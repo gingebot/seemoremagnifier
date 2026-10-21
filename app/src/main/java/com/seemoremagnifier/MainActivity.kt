@@ -63,6 +63,7 @@ import com.seemoremagnifier.data.frame.LatestFrameStore
 import com.seemoremagnifier.domain.magnifier.ZoomPolicy
 import com.seemoremagnifier.domain.magnifier.FrozenPanPolicy
 import com.seemoremagnifier.ui.magnifier.CameraError
+import com.seemoremagnifier.ui.magnifier.LiveGesturePolicy
 import com.seemoremagnifier.ui.magnifier.detectMagnifierGestures
 import androidx.camera.core.ZoomState
 import kotlinx.coroutines.launch
@@ -250,6 +251,11 @@ private fun CameraPreviewContent(
         mutableStateOf<androidx.lifecycle.Observer<androidx.camera.view.PreviewView.StreamState>?>(null)
     }
     var zoomState by remember { mutableStateOf<ZoomState?>(null) }
+    var torchAvailable by remember { mutableStateOf(false) }
+    var torchEnabled by remember { mutableStateOf(false) }
+    var restoreTorchAfterResume by remember { mutableStateOf(false) }
+    var torchTogglePending by remember { mutableStateOf(false) }
+    var torchNotice by remember { mutableIntStateOf(0) }
     var savedZoomRatio by rememberSaveable { mutableFloatStateOf(1f) }
     var frozenZoomRatio by remember { mutableFloatStateOf(1f) }
     var frozenBaseZoomRatio by remember { mutableFloatStateOf(1f) }
@@ -265,6 +271,10 @@ private fun CameraPreviewContent(
     var isRebindingAfterFreeze by remember { mutableStateOf(false) }
     var zoomErrorVisible by remember { mutableStateOf(false) }
     val latestZoomState = rememberUpdatedState(zoomState)
+    val latestTorchEnabled = rememberUpdatedState(torchEnabled)
+    val latestTorchAvailable = rememberUpdatedState(torchAvailable)
+    val latestTorchTogglePending = rememberUpdatedState(torchTogglePending)
+    val latestIsCapturingStill = rememberUpdatedState(isCapturingStill)
     val latestFrozenFrame = rememberUpdatedState(frozenFrame)
     val latestPreviewView = rememberUpdatedState(previewView)
     val currentZoomErrorHandler: (CameraError) -> Unit = { error ->
@@ -288,6 +298,8 @@ private fun CameraPreviewContent(
             frozenPanOffset = Offset.Zero
             frozenFrame = fallback
             isCapturingStill = false
+            torchEnabled = false
+            torchAvailable = false
             previewController.unbind()
             onFrameError(error)
         }
@@ -302,6 +314,8 @@ private fun CameraPreviewContent(
     }
     val liveTapHandler: (Offset) -> Unit = { tapPosition ->
         if (cameraError == null && frozenFrame == null && !isCapturingStill) {
+            restoreTorchAfterResume = torchEnabled
+            torchTogglePending = false
             val trace = FreezeTiming.start()
             frozenBaseZoomRatio = savedZoomRatio
             frozenZoomRatio = savedZoomRatio
@@ -328,6 +342,8 @@ private fun CameraPreviewContent(
                     frozenFrame = captured
                     frozenFrameTrace = trace
                     isCapturingStill = false
+                    torchEnabled = false
+                    torchAvailable = false
                     previewController.unbind()
                     FreezeTiming.mark(trace, "frozen-frame-state-set size=${captured.width}x${captured.height}")
                 },
@@ -350,6 +366,12 @@ private fun CameraPreviewContent(
             zoomErrorVisible = false
         }
     }
+    LaunchedEffect(torchNotice) {
+        if (torchNotice != 0) {
+            kotlinx.coroutines.delay(1_500)
+            torchNotice = 0
+        }
+    }
     DisposableEffect(previewController) {
         onDispose {
             previewStreamObserver?.let { observer ->
@@ -367,6 +389,24 @@ private fun CameraPreviewContent(
         frameStore.resume()
         isRebindingAfterFreeze = false
         onCameraReady()
+        if (restoreTorchAfterResume) {
+            restoreTorchAfterResume = false
+            if (!torchAvailable) {
+                torchNotice = R.string.camera_light_unavailable
+            } else {
+                torchTogglePending = true
+                previewController.toggleTorch(enabled = true) { succeeded ->
+                    torchTogglePending = false
+                    if (succeeded) {
+                        torchEnabled = true
+                        torchNotice = R.string.camera_light_on
+                    } else {
+                        torchEnabled = false
+                        torchNotice = R.string.camera_light_toggle_failed
+                    }
+                }
+            }
+        }
     }
     val handleCameraBound = {
         previewBound = true
@@ -398,6 +438,10 @@ private fun CameraPreviewContent(
             requestedZoomRatio = savedZoomRatio,
             frameStore = frameStore,
             onBound = handleCameraBound,
+            onTorchAvailability = { available ->
+                torchAvailable = available
+                if (!available) torchEnabled = false
+            },
             onZoomState = {
                 zoomState = it
             },
@@ -415,6 +459,10 @@ private fun CameraPreviewContent(
             previewController.rebind(
                 requestedZoomRatio = savedZoomRatio,
                 onBound = handleCameraBound,
+                onTorchAvailability = { available ->
+                    torchAvailable = available
+                    if (!available) torchEnabled = false
+                },
                 onZoomState = {
                     zoomState = it
                 },
@@ -457,6 +505,30 @@ private fun CameraPreviewContent(
                                 )
                             },
                             onTap = { latestLiveTapHandler.value(it) },
+                            onSwipeUp = {
+                                if (latestIsCapturingStill.value) return@detectMagnifierGestures
+                                if (!latestTorchAvailable.value) {
+                                    torchNotice = R.string.camera_light_unavailable
+                                    return@detectMagnifierGestures
+                                }
+                                if (latestTorchTogglePending.value) return@detectMagnifierGestures
+                                torchTogglePending = true
+                                val requestedTorchState = !latestTorchEnabled.value
+                                previewController.toggleTorch(requestedTorchState) { succeeded ->
+                                    torchTogglePending = false
+                                    if (succeeded) {
+                                        torchEnabled = requestedTorchState
+                                        torchNotice = if (requestedTorchState) {
+                                            R.string.camera_light_on
+                                        } else {
+                                            R.string.camera_light_off
+                                        }
+                                    } else {
+                                        torchEnabled = false
+                                        torchNotice = R.string.camera_light_toggle_failed
+                                    }
+                                }
+                            },
                         )
                     },
             )
@@ -574,6 +646,14 @@ private fun CameraPreviewContent(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
                 color = MaterialTheme.colorScheme.onErrorContainer,
                 style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        if (torchNotice != 0 && frozenFrame == null && cameraError == null) {
+            Text(
+                text = stringResource(torchNotice),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp),
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge,
             )
         }
         frameError?.let { error ->

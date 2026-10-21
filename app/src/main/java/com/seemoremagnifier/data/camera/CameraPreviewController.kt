@@ -38,6 +38,7 @@ class CameraPreviewController(context: Context) {
     private var analysisUseCase: ImageAnalysis? = null
     private var imageCaptureUseCase: ImageCapture? = null
     private var cameraControl: androidx.camera.core.CameraControl? = null
+    private var activeCamera: androidx.camera.core.Camera? = null
     private var requestedZoomRatio: Float? = null
     private var bindGeneration = 0
     private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -51,6 +52,7 @@ class CameraPreviewController(context: Context) {
         requestedZoomRatio: Float,
         frameStore: LatestFrameStore<Bitmap>,
         onBound: () -> Unit,
+        onTorchAvailability: (Boolean) -> Unit,
         onZoomState: (ZoomState) -> Unit,
         onFrameError: (CameraError) -> Unit,
         onError: (CameraError) -> Unit,
@@ -107,10 +109,12 @@ class CameraPreviewController(context: Context) {
                 analysisUseCase = analysis
                 imageCaptureUseCase = imageCapture
                 cameraControl = camera.cameraControl
+                activeCamera = camera
                 activeLifecycleOwner = lifecycleOwner
                 activePreviewView = previewView
                 activeFrameStore = frameStore
                 camera.cameraInfo.zoomState.observe(lifecycleOwner, onZoomState)
+                onTorchAvailability(camera.cameraInfo.hasFlashUnit())
                 val zoomState = camera.cameraInfo.zoomState.value
                 if (zoomState != null) {
                     val restoredRatio = requestedZoomRatio.coerceIn(
@@ -179,6 +183,25 @@ class CameraPreviewController(context: Context) {
         }, mainExecutor)
     }
 
+    fun toggleTorch(
+        enabled: Boolean,
+        onResult: (Boolean) -> Unit,
+    ) {
+        val camera = activeCamera
+        if (camera == null || !camera.cameraInfo.hasFlashUnit()) {
+            onResult(false)
+            return
+        }
+        try {
+            val torchFuture = camera.cameraControl.enableTorch(enabled)
+            torchFuture.addListener({
+                onResult(runCatching { torchFuture.get() }.isSuccess)
+            }, mainExecutor)
+        } catch (_: Exception) {
+            onResult(false)
+        }
+    }
+
     private fun reportZoomFailureUnlessSuperseded(
         exception: Exception,
         onError: (CameraError) -> Unit,
@@ -195,12 +218,14 @@ class CameraPreviewController(context: Context) {
 
     fun unbind() {
         bindGeneration++
+        runCatching { cameraControl?.enableTorch(false) }
         val useCases = listOfNotNull(previewUseCase, analysisUseCase, imageCaptureUseCase).toTypedArray()
         if (useCases.isNotEmpty()) cameraProvider?.unbind(*useCases)
         previewUseCase = null
         analysisUseCase = null
         imageCaptureUseCase = null
         cameraControl = null
+        activeCamera = null
     }
 
     internal fun focusAndCapture(
@@ -346,6 +371,7 @@ class CameraPreviewController(context: Context) {
     fun rebind(
         requestedZoomRatio: Float,
         onBound: () -> Unit,
+        onTorchAvailability: (Boolean) -> Unit,
         onZoomState: (ZoomState) -> Unit,
         onFrameError: (CameraError) -> Unit,
         onError: (CameraError) -> Unit,
@@ -362,7 +388,17 @@ class CameraPreviewController(context: Context) {
             onError(CameraError.BindingFailed)
             return
         }
-        bind(owner, view, requestedZoomRatio, store, onBound, onZoomState, onFrameError, onError)
+        bind(
+            owner,
+            view,
+            requestedZoomRatio,
+            store,
+            onBound,
+            onTorchAvailability,
+            onZoomState,
+            onFrameError,
+            onError,
+        )
     }
 
     fun shutdown() {

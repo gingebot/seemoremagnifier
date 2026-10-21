@@ -19,6 +19,10 @@
     <string name="camera_focus_locked">Focus locked</string>
     <string name="camera_focus_timeout">Focus not confirmed — hold steady</string>
     <string name="camera_zoom_failed">Zoom could not be changed. Please try pinching again.</string>
+    <string name="camera_light_on">Light on</string>
+    <string name="camera_light_off">Light off</string>
+    <string name="camera_light_unavailable">This camera does not have a torch.</string>
+    <string name="camera_light_toggle_failed">The camera light could not be changed.</string>
     <string name="no_frame_available">The camera has not produced a frame yet. Please tap again.</string>
     <string name="frame_conversion_failed">The camera frame could not be prepared. Please try again.</string>
     <string name="frame_allocation_failed">There is not enough memory to freeze this frame. Please try again.</string>
