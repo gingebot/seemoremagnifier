@@ -2,14 +2,11 @@ package com.seemoremagnifier
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
 import android.view.Surface
 import android.hardware.display.DisplayManager
 import androidx.activity.ComponentActivity
@@ -19,15 +16,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,11 +42,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -58,12 +54,12 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.view.View
 import com.seemoremagnifier.data.camera.CameraPreviewController
-import com.seemoremagnifier.data.camera.FreezeCaptureOptions
 import com.seemoremagnifier.data.camera.FreezeTiming
 import com.seemoremagnifier.data.frame.LatestFrameStore
 import com.seemoremagnifier.domain.magnifier.ZoomPolicy
@@ -131,7 +127,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 internal fun MagnifierPermissionScreen(targetRotation: Int = Surface.ROTATION_0) {
     val context = LocalContext.current
-    val activity = context as? ComponentActivity
     val lifecycleOwner = LocalLifecycleOwner.current
     val permissionPreferences = remember(context) {
         context.getSharedPreferences("camera_permission", Context.MODE_PRIVATE)
@@ -149,25 +144,7 @@ internal fun MagnifierPermissionScreen(targetRotation: Int = Surface.ROTATION_0)
     var showPermissionExplanation by remember(permissionGranted) {
         mutableStateOf(!permissionGranted && permissionPreferences.getBoolean("requested", false))
     }
-    var permissionPermanentlyDenied by remember(permissionGranted) {
-        mutableStateOf(
-            !permissionGranted &&
-                permissionPreferences.getBoolean("requested", false) &&
-                activity?.let {
-                    !it.shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)
-                } == true,
-        )
-    }
     var cameraError by remember { mutableStateOf<CameraError?>(null) }
-    var frameError by remember { mutableStateOf<CameraError?>(null) }
-    var retryToken by remember { mutableStateOf(0) }
-
-    LaunchedEffect(frameError) {
-        if (frameError != null) {
-            kotlinx.coroutines.delay(2_500)
-            frameError = null
-        }
-    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -175,8 +152,6 @@ internal fun MagnifierPermissionScreen(targetRotation: Int = Surface.ROTATION_0)
         hasRequestedPermission = true
         permissionGranted = granted
         showPermissionExplanation = !granted
-        permissionPermanentlyDenied = !granted && hasRequestedPermission &&
-            activity?.let { !it.shouldShowRequestPermissionRationale(Manifest.permission.CAMERA) } == true
         cameraError = null
     }
 
@@ -193,9 +168,6 @@ internal fun MagnifierPermissionScreen(targetRotation: Int = Surface.ROTATION_0)
                     cameraError = null
                 } else if (hasRequestedPermission) {
                     showPermissionExplanation = true
-                    permissionPermanentlyDenied = activity?.let {
-                        !it.shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)
-                    } == true
                 }
             }
         }
@@ -219,15 +191,8 @@ internal fun MagnifierPermissionScreen(targetRotation: Int = Surface.ROTATION_0)
         permissionGranted -> {
             CameraPreviewContent(
                 targetRotation = targetRotation,
-                retryToken = retryToken,
-                frameError = frameError,
-                onFrameError = { frameError = it },
                 onCameraError = { cameraError = it },
                 onCameraReady = { cameraError = null },
-                onRetry = {
-                    cameraError = null
-                    retryToken++
-                },
                 cameraError = cameraError,
             )
         }
@@ -235,55 +200,24 @@ internal fun MagnifierPermissionScreen(targetRotation: Int = Surface.ROTATION_0)
         showPermissionExplanation -> {
             PermissionMessage(
                 title = stringResource(R.string.camera_permission_title),
-                message = stringResource(R.string.camera_permission_rationale),
-                actionLabel = if (permissionPermanentlyDenied) {
-                    stringResource(R.string.open_app_settings)
-                } else {
-                    stringResource(R.string.retry_permission)
-                },
+                actionLabel = stringResource(R.string.retry_permission),
                 onAction = {
-                    if (permissionPermanentlyDenied) {
-                        context.startActivity(
-                            Intent(
-                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                Uri.fromParts("package", context.packageName, null),
-                            ),
-                        )
-                    } else {
-                        permissionPreferences.edit().putBoolean("requested", true).apply()
-                        permissionLauncher.launch(Manifest.permission.CAMERA)
-                    }
+                    permissionPreferences.edit().putBoolean("requested", true).apply()
+                    permissionLauncher.launch(Manifest.permission.CAMERA)
                 },
             )
         }
 
-        else -> {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    CircularProgressIndicator()
-                    Text(stringResource(R.string.camera_permission_initial_message))
-                }
-            }
-        }
+        else -> Box(modifier = Modifier.fillMaxSize())
     }
 }
 
 @Composable
 private fun CameraPreviewContent(
     targetRotation: Int,
-    retryToken: Int,
-    frameError: CameraError?,
-    onFrameError: (CameraError) -> Unit,
     cameraError: CameraError?,
     onCameraError: (CameraError) -> Unit,
     onCameraReady: () -> Unit,
-    onRetry: () -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -301,7 +235,6 @@ private fun CameraPreviewContent(
     var torchEnabled by remember { mutableStateOf(false) }
     var restoreTorchAfterResume by remember { mutableStateOf(false) }
     var torchTogglePending by remember { mutableStateOf(false) }
-    var torchNotice by remember { mutableIntStateOf(0) }
     var savedZoomRatio by rememberSaveable { mutableFloatStateOf(1f) }
     var frozenZoomRatio by remember { mutableFloatStateOf(1f) }
     var frozenBaseZoomRatio by remember { mutableFloatStateOf(1f) }
@@ -312,12 +245,10 @@ private fun CameraPreviewContent(
     var frozenPanFlingJob by remember { mutableStateOf<Job?>(null) }
     var frozenFrame by remember { mutableStateOf<Bitmap?>(null) }
     var frozenFrameTrace by remember { mutableStateOf<FreezeTiming.Trace?>(null) }
+    var freezeFlashTrigger by remember { mutableIntStateOf(0) }
+    var showFrozenBorder by remember { mutableStateOf(false) }
     var isCapturingStill by remember { mutableStateOf(false) }
-    var tapFocusPosition by remember { mutableStateOf(Offset.Zero) }
-    var focusLocked by remember { mutableStateOf<Boolean?>(null) }
-    var focusAnimationKey by remember { mutableIntStateOf(0) }
     var isRebindingAfterFreeze by remember { mutableStateOf(false) }
-    var zoomErrorVisible by remember { mutableStateOf(false) }
     val latestZoomState = rememberUpdatedState(zoomState)
     val latestTorchEnabled = rememberUpdatedState(torchEnabled)
     val latestTorchAvailable = rememberUpdatedState(torchAvailable)
@@ -337,7 +268,7 @@ private fun CameraPreviewContent(
         (frozenZoomRatio / frozenBaseZoomRatio).coerceAtLeast(1f) * viewportCompensation
     } ?: 1f
     val currentZoomErrorHandler: (CameraError) -> Unit = { error ->
-        if (error == CameraError.ZoomFailed) zoomErrorVisible = true else onCameraError(error)
+        if (error != CameraError.ZoomFailed) onCameraError(error)
     }
     val latestZoomErrorHandler = rememberUpdatedState(currentZoomErrorHandler)
     LaunchedEffect(frozenFrame, isRebindingAfterFreeze, isCapturingStill, cameraError) {
@@ -346,12 +277,13 @@ private fun CameraPreviewContent(
             frozenPanFlingJob = null
         }
     }
-    val freezeWithLatestAnalysisFrame: (CameraError) -> Unit = { error ->
+    val freezeWithLatestAnalysisFrame: () -> Unit = {
         val fallback = frameStore.freezeLatest()
         if (fallback == null) {
             isCapturingStill = false
-            onFrameError(CameraError.NoFrameAvailable)
+            showFrozenBorder = false
         } else {
+            showFrozenBorder = true
             frozenBaseZoomRatio = savedZoomRatio
             frozenZoomRatio = savedZoomRatio
             frozenCaptureViewportWidth = viewportWidth
@@ -362,7 +294,6 @@ private fun CameraPreviewContent(
             torchEnabled = false
             torchAvailable = false
             previewController.unbind()
-            onFrameError(error)
         }
     }
     val latestFallbackHandler = rememberUpdatedState(freezeWithLatestAnalysisFrame)
@@ -383,9 +314,8 @@ private fun CameraPreviewContent(
             frozenCaptureViewportWidth = viewportWidth
             frozenCaptureViewportHeight = viewportHeight
             frozenPanOffset = Offset.Zero
-            tapFocusPosition = tapPosition
-            focusLocked = null
-            focusAnimationKey++
+            showFrozenBorder = true
+            freezeFlashTrigger++
             isCapturingStill = true
             val view = previewView
             previewController.focusAndCapture(
@@ -394,10 +324,7 @@ private fun CameraPreviewContent(
                 y = tapPosition.y,
                 previewWidth = view?.width ?: 0,
                 previewHeight = view?.height ?: 0,
-                onFocusResult = { focused ->
-                    FreezeTiming.mark(trace, "focus-result-ui focused=$focused")
-                    focusLocked = focused
-                },
+                onFocusResult = {},
                 onCaptured = { captured ->
                     frameStore.freezeLatest()?.let { if (!it.isRecycled) it.recycle() }
                     frameStore.pause()
@@ -412,7 +339,7 @@ private fun CameraPreviewContent(
                 },
                 onError = { error ->
                     FreezeTiming.mark(trace, "capture-error fallback=$error")
-                    latestFallbackHandler.value(error)
+                    latestFallbackHandler.value()
                     if (frozenFrame != null) {
                         frozenFrameTrace = trace
                         FreezeTiming.mark(trace, "fallback-frame-state-set")
@@ -423,12 +350,6 @@ private fun CameraPreviewContent(
     }
     val latestLiveTapHandler = rememberUpdatedState(liveTapHandler)
 
-    LaunchedEffect(zoomErrorVisible) {
-        if (zoomErrorVisible) {
-            kotlinx.coroutines.delay(1_800)
-            zoomErrorVisible = false
-        }
-    }
     LaunchedEffect(targetRotation) {
         previewController.updateTargetRotation(targetRotation)
     }
@@ -442,12 +363,6 @@ private fun CameraPreviewContent(
             imageHeight = frame.height,
             scale = frozenRenderScale,
         )
-    }
-    LaunchedEffect(torchNotice) {
-        if (torchNotice != 0) {
-            kotlinx.coroutines.delay(1_500)
-            torchNotice = 0
-        }
     }
     DisposableEffect(previewController) {
         onDispose {
@@ -468,19 +383,11 @@ private fun CameraPreviewContent(
         onCameraReady()
         if (restoreTorchAfterResume) {
             restoreTorchAfterResume = false
-            if (!torchAvailable) {
-                torchNotice = R.string.camera_light_unavailable
-            } else {
+            if (torchAvailable) {
                 torchTogglePending = true
                 previewController.toggleTorch(enabled = true) { succeeded ->
                     torchTogglePending = false
-                    if (succeeded) {
-                        torchEnabled = true
-                        torchNotice = R.string.camera_light_on
-                    } else {
-                        torchEnabled = false
-                        torchNotice = R.string.camera_light_toggle_failed
-                    }
+                    torchEnabled = succeeded
                 }
             }
         }
@@ -506,7 +413,7 @@ private fun CameraPreviewContent(
         }
     }
 
-    LaunchedEffect(previewView, lifecycleOwner, retryToken) {
+    LaunchedEffect(previewView, lifecycleOwner) {
         val view = previewView ?: return@LaunchedEffect
         previewBound = false
         previewController.bind(
@@ -522,13 +429,14 @@ private fun CameraPreviewContent(
             onZoomState = {
                 zoomState = it
             },
-            onFrameError = onFrameError,
+            onFrameError = {},
             onError = currentZoomErrorHandler,
         )
     }
 
     val resumeFrozenFrame = {
         if (!isRebindingAfterFreeze && frozenFrame != null) {
+            showFrozenBorder = false
             frameStore.pause()
             onCameraReady()
             isRebindingAfterFreeze = true
@@ -543,7 +451,7 @@ private fun CameraPreviewContent(
                 onZoomState = {
                     zoomState = it
                 },
-                onFrameError = onFrameError,
+                onFrameError = {},
                 onError = { error ->
                     previewStreamObserver?.let { observer ->
                         previewView?.previewStreamState?.removeObserver(observer)
@@ -591,40 +499,17 @@ private fun CameraPreviewContent(
                             onTap = { latestLiveTapHandler.value(it) },
                             onSwipeUp = {
                                 if (latestIsCapturingStill.value) return@detectMagnifierGestures
-                                if (!latestTorchAvailable.value) {
-                                    torchNotice = R.string.camera_light_unavailable
-                                    return@detectMagnifierGestures
-                                }
+                                if (!latestTorchAvailable.value) return@detectMagnifierGestures
                                 if (latestTorchTogglePending.value) return@detectMagnifierGestures
                                 torchTogglePending = true
                                 val requestedTorchState = !latestTorchEnabled.value
                                 previewController.toggleTorch(requestedTorchState) { succeeded ->
                                     torchTogglePending = false
-                                    if (succeeded) {
-                                        torchEnabled = requestedTorchState
-                                        torchNotice = if (requestedTorchState) {
-                                            R.string.camera_light_on
-                                        } else {
-                                            R.string.camera_light_off
-                                        }
-                                    } else {
-                                        torchEnabled = false
-                                        torchNotice = R.string.camera_light_toggle_failed
-                                    }
+                                    torchEnabled = succeeded && requestedTorchState
                                 }
                             },
                         )
                     },
-            )
-        }
-        if (isCapturingStill) {
-            FocusAcquisitionIndicator(
-                position = tapFocusPosition,
-                previewWidth = previewView?.width ?: 0,
-                previewHeight = previewView?.height ?: 0,
-                focusLocked = focusLocked,
-                animationKey = focusAnimationKey,
-                showFocusBrackets = FreezeCaptureOptions.ENABLE_TAP_POINT_FOCUS,
             )
         }
         frozenFrame?.let { frame ->
@@ -721,6 +606,10 @@ private fun CameraPreviewContent(
                 onResume = { resumeFrozenFrame() },
             )
         }
+        FreezeScreenFlash(
+            trigger = freezeFlashTrigger,
+            showBorder = showFrozenBorder,
+        )
         if (frozenFrame == null) {
             zoomState?.let { currentZoom ->
                 ZoomIndicator(
@@ -731,155 +620,10 @@ private fun CameraPreviewContent(
         } else {
             ZoomIndicator(
                 zoomRatio = frozenZoomRatio,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 104.dp),
-            )
-        }
-        if (zoomErrorVisible && cameraError == null) {
-            Text(
-                text = stringResource(R.string.camera_zoom_failed),
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        if (torchNotice != 0 && frozenFrame == null && cameraError == null) {
-            Text(
-                text = stringResource(torchNotice),
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp),
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
-        frameError?.let { error ->
-            Text(
-                text = stringResource(error.messageRes),
-                modifier = Modifier.align(Alignment.BottomCenter)
-                    .padding(bottom = if (zoomErrorVisible) 64.dp else 32.dp),
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        when {
-            cameraError != null && frozenFrame == null -> PermissionMessage(
-                title = stringResource(R.string.camera_unavailable_title),
-                message = stringResource(cameraError.messageRes),
-                actionLabel = stringResource(R.string.retry_camera),
-                onAction = onRetry,
-            )
-            !previewBound && frozenFrame == null -> Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator()
-            }
-        }
-    }
-}
-
-@Composable
-private fun FocusAcquisitionIndicator(
-    position: Offset,
-    previewWidth: Int,
-    previewHeight: Int,
-    focusLocked: Boolean?,
-    animationKey: Int,
-    showFocusBrackets: Boolean,
-) {
-    val convergence = remember { Animatable(0f) }
-    val pulse = remember { Animatable(0f) }
-    val screenFlash = remember { Animatable(0f) }
-    val density = LocalDensity.current
-
-    LaunchedEffect(animationKey) {
-        convergence.snapTo(0f)
-        screenFlash.snapTo(0.8f)
-        launch {
-            screenFlash.animateTo(0f, animationSpec = tween(durationMillis = 450))
-        }
-        if (showFocusBrackets) {
-            convergence.animateTo(1f, animationSpec = tween(durationMillis = 560))
-        }
-    }
-    LaunchedEffect(focusLocked, animationKey) {
-        pulse.snapTo(0f)
-        if (focusLocked == false) {
-            while (true) {
-                pulse.animateTo(1f, tween(durationMillis = 680))
-                pulse.animateTo(0f, tween(durationMillis = 680))
-            }
-        }
-    }
-
-    val bracketColor = when (focusLocked) {
-        true -> Color(0xFF65E695)
-        false -> Color(0xFFFFC15A)
-        null -> Color.White
-    }
-    val outerRadius = with(density) { 140.dp.toPx() }
-    val innerRadius = with(density) { 38.dp.toPx() }
-    val radius = outerRadius + (innerRadius - outerRadius) * convergence.value + pulse.value * with(density) { 5.dp.toPx() }
-    val cornerLength = with(density) { 20.dp.toPx() }
-    val strokeWidth = with(density) { 4.dp.toPx() }
-    val haloWidth = with(density) { 10.dp.toPx() }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            if (screenFlash.value > 0f) {
-                drawRect(Color.White.copy(alpha = screenFlash.value))
-            }
-            if (showFocusBrackets && previewWidth > 0 && previewHeight > 0) {
-                val center = Offset(
-                    x = position.x.coerceIn(0f, size.width),
-                    y = position.y.coerceIn(0f, size.height),
-                )
-                val alpha = if (focusLocked == false) 0.65f + pulse.value * 0.35f else 1f
-                val color = bracketColor.copy(alpha = alpha)
-                val left = center.x - radius
-                val right = center.x + radius
-                val top = center.y - radius
-                val bottom = center.y + radius
-
-                drawOutlinedFocusLine(color, Offset(left, top), Offset(left + cornerLength, top), strokeWidth, haloWidth)
-                drawOutlinedFocusLine(color, Offset(left, top), Offset(left, top + cornerLength), strokeWidth, haloWidth)
-                drawOutlinedFocusLine(color, Offset(right, top), Offset(right - cornerLength, top), strokeWidth, haloWidth)
-                drawOutlinedFocusLine(color, Offset(right, top), Offset(right, top + cornerLength), strokeWidth, haloWidth)
-                drawOutlinedFocusLine(color, Offset(left, bottom), Offset(left + cornerLength, bottom), strokeWidth, haloWidth)
-                drawOutlinedFocusLine(color, Offset(left, bottom), Offset(left, bottom - cornerLength), strokeWidth, haloWidth)
-                drawOutlinedFocusLine(color, Offset(right, bottom), Offset(right - cornerLength, bottom), strokeWidth, haloWidth)
-                drawOutlinedFocusLine(color, Offset(right, bottom), Offset(right, bottom - cornerLength), strokeWidth, haloWidth)
-                if (focusLocked == true) drawCircle(color, radius = with(density) { 3.dp.toPx() }, center = center)
-            }
-        }
-        Surface(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ) {
-            Text(
-                text = stringResource(
-                    when (focusLocked) {
-                        true -> R.string.camera_focus_locked
-                        false -> R.string.camera_focus_timeout
-                        null -> R.string.camera_hold_steady
-                    },
-                ),
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp),
             )
         }
     }
-}
-
-private fun DrawScope.drawOutlinedFocusLine(
-    color: Color,
-    start: Offset,
-    end: Offset,
-    strokeWidth: Float,
-    haloWidth: Float,
-) {
-    drawLine(Color.Black.copy(alpha = 0.84f), start, end, haloWidth)
-    drawLine(color, start, end, strokeWidth)
 }
 
 @Composable
@@ -923,14 +667,14 @@ private fun FrozenFrameContent(
                     },
                     onGestureStart = { latestOnGestureStart.value() },
                     onTap = {
-                        if (!isRebinding && !isCapturingStill && rebindError == null) latestOnResume.value()
+                        if (!isRebinding && !isCapturingStill) latestOnResume.value()
                     },
                 )
             },
     ) {
         androidx.compose.foundation.Image(
             bitmap = frame.asImageBitmap(),
-            contentDescription = stringResource(R.string.frozen_status),
+            contentDescription = null,
             modifier = Modifier.fillMaxSize().graphicsLayer {
                 val relativeZoom = (zoomRatio / baseZoomRatio).coerceAtLeast(1f) *
                     viewportScaleCompensation
@@ -941,47 +685,76 @@ private fun FrozenFrameContent(
             },
             contentScale = androidx.compose.ui.layout.ContentScale.Fit,
         )
-        Surface(
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ) {
-            Text(
-                text = stringResource(R.string.frozen_status),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.titleMedium,
+    }
+}
+
+@Composable
+private fun FreezeScreenFlash(
+    trigger: Int,
+    showBorder: Boolean,
+) {
+    val alpha = remember { Animatable(0f) }
+    val view = LocalView.current
+
+    LaunchedEffect(trigger) {
+        if (trigger > 0) {
+            alpha.snapTo(0.8f)
+            alpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 450),
             )
         }
-        Text(
-            text = when {
-                isCapturingStill -> stringResource(R.string.camera_focusing)
-                isRebinding -> stringResource(R.string.camera_rebinding)
-                rebindError != null -> stringResource(rebindError.messageRes)
-                else -> stringResource(R.string.tap_to_resume)
-            },
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
-            color = MaterialTheme.colorScheme.onSurface,
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        if (rebindError != null && !isCapturingStill) {
-            Button(
-                onClick = onResume,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),
-            ) { Text(stringResource(R.string.retry_camera)) }
-        } else if (isCapturingStill) {
-            Button(
-                onClick = onResume,
-                enabled = false,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),
-            ) { Text(stringResource(R.string.camera_focusing)) }
-        } else {
-            Button(
-                onClick = onResume,
-                enabled = !isRebinding && !isCapturingStill,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),
-            ) { Text(stringResource(R.string.resume_live_view)) }
+    }
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        if (alpha.value > 0f) {
+            drawRect(Color.White.copy(alpha = alpha.value))
         }
+        if (showBorder) {
+            val strokeWidth = 6.dp.toPx()
+            val inset = strokeWidth / 2f
+            val (topLeft, topRight, bottomRight, bottomLeft) = view.roundedDisplayCornerRadii()
+            val width = size.width
+            val height = size.height
+            val left = inset
+            val top = inset
+            val right = width - inset
+            val bottom = height - inset
+            val outline = Path().apply {
+                moveTo(left + topLeft, top)
+                lineTo(right - topRight, top)
+                quadraticTo(right, top, right, top + topRight)
+                lineTo(right, bottom - bottomRight)
+                quadraticTo(right, bottom, right - bottomRight, bottom)
+                lineTo(left + bottomLeft, bottom)
+                quadraticTo(left, bottom, left, bottom - bottomLeft)
+                lineTo(left, top + topLeft)
+                quadraticTo(left, top, left + topLeft, top)
+                close()
+            }
+            drawPath(
+                path = outline,
+                color = Color.White,
+                style = Stroke(width = strokeWidth),
+            )
+        }
+    }
+}
+
+private fun View.roundedDisplayCornerRadii(): List<Float> {
+    val fallback = 28.dp.value * resources.displayMetrics.density
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) {
+        return List(4) { fallback }
+    }
+
+    val insets = rootWindowInsets ?: return List(4) { fallback }
+    return listOf(
+        android.view.RoundedCorner.POSITION_TOP_LEFT,
+        android.view.RoundedCorner.POSITION_TOP_RIGHT,
+        android.view.RoundedCorner.POSITION_BOTTOM_RIGHT,
+        android.view.RoundedCorner.POSITION_BOTTOM_LEFT,
+    ).map { position ->
+        insets.getRoundedCorner(position)?.radius?.toFloat() ?: fallback
     }
 }
 
@@ -1000,7 +773,7 @@ private fun ZoomIndicator(
         Text(
             text = String.format(locale, "%.1fx", zoomRatio),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.bodyLarge,
         )
     }
 }
@@ -1028,7 +801,6 @@ private fun AndroidCameraPreview(
 @Composable
 internal fun PermissionMessage(
     title: String,
-    message: String,
     actionLabel: String,
     onAction: () -> Unit,
 ) {
@@ -1042,13 +814,7 @@ internal fun PermissionMessage(
         Text(
             text = title,
             style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-        )
-        Text(
-            text = message,
-            modifier = Modifier.padding(top = 16.dp),
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
         Button(
             onClick = onAction,
