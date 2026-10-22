@@ -19,6 +19,7 @@ Make zoom available in frozen mode and ensure tap and pinch gestures behave pred
 - Track velocity for completed single-finger frozen pans and apply bounded inertial decay.
 - Define tap slop, pointer-count, and cancellation behavior.
 - Make the full content area the primary interaction target.
+- Preserve the frozen image's apparent size and logical zoom across display rotation; compensate for viewport fit changes, clamp pan to the resized viewport, and use black for uncovered areas.
 
 ## Requirements
 
@@ -39,6 +40,7 @@ Make zoom available in frozen mode and ensure tap and pinch gestures behave pred
 - A pinch never freezes or unfreezes the image accidentally.
 - A valid single tap toggles state in either mode.
 - Zoom and crop remain visually consistent when freezing and unfreezing.
+- Rotating while frozen keeps the same apparent image size and zoom, allows immediate bounded panning if it overflows the new viewport, and shows black outside the image.
 - Repeated and interrupted gestures recover cleanly.
 
 ## Tests and Device Validation

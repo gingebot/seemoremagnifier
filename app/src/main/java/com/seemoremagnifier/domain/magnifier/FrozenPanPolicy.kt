@@ -28,6 +28,35 @@ object FrozenPanPolicy {
         )
     }
 
+    fun fitScale(viewportWidth: Int, viewportHeight: Int, imageWidth: Int, imageHeight: Int): Float {
+        require(viewportWidth >= 0 && viewportHeight >= 0) { "Viewport dimensions must not be negative." }
+        require(imageWidth > 0 && imageHeight > 0) { "Image dimensions must be positive." }
+        if (viewportWidth == 0 || viewportHeight == 0) return 0f
+        return min(
+            viewportWidth.toFloat() / imageWidth,
+            viewportHeight.toFloat() / imageHeight,
+        )
+    }
+
+    fun viewportScaleCompensation(
+        captureViewportWidth: Int,
+        captureViewportHeight: Int,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        imageWidth: Int,
+        imageHeight: Int,
+    ): Float {
+        val capturedFitScale = fitScale(
+            captureViewportWidth,
+            captureViewportHeight,
+            imageWidth,
+            imageHeight,
+        )
+        val currentFitScale = fitScale(viewportWidth, viewportHeight, imageWidth, imageHeight)
+        if (capturedFitScale == 0f || currentFitScale == 0f) return 1f
+        return capturedFitScale / currentFitScale
+    }
+
     fun clamp(
         offset: Offset,
         viewportWidth: Int,
@@ -39,14 +68,11 @@ object FrozenPanPolicy {
         require(offset.x.isFinite() && offset.y.isFinite()) { "Pan offset must be finite." }
         require(viewportWidth >= 0 && viewportHeight >= 0) { "Viewport dimensions must not be negative." }
         require(imageWidth > 0 && imageHeight > 0) { "Image dimensions must be positive." }
-        require(scale.isFinite() && scale >= 1f) { "Image scale must be finite and at least one." }
+        require(scale.isFinite() && scale > 0f) { "Image scale must be finite and positive." }
 
         if (viewportWidth == 0 || viewportHeight == 0) return Offset.Zero
 
-        val fitScale = min(
-            viewportWidth.toFloat() / imageWidth,
-            viewportHeight.toFloat() / imageHeight,
-        )
+        val fitScale = fitScale(viewportWidth, viewportHeight, imageWidth, imageHeight)
         val maxX = max(0f, (imageWidth * fitScale * scale - viewportWidth) / 2f)
         val maxY = max(0f, (imageHeight * fitScale * scale - viewportHeight) / 2f)
         return Offset(

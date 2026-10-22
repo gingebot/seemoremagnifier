@@ -202,6 +202,12 @@ class CameraPreviewController(context: Context) {
         }
     }
 
+    fun updateTargetRotation(rotation: Int) {
+        previewUseCase?.targetRotation = rotation
+        analysisUseCase?.targetRotation = rotation
+        imageCaptureUseCase?.targetRotation = rotation
+    }
+
     private fun reportZoomFailureUnlessSuperseded(
         exception: Exception,
         onError: (CameraError) -> Unit,

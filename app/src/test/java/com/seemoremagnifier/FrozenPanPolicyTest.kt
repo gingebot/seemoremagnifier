@@ -75,4 +75,36 @@ class FrozenPanPolicyTest {
         assertEquals(0f, result.x, 0.001f)
         assertEquals(0f, result.y, 0.001f)
     }
+
+    @Test
+    fun viewportScaleCompensationPreservesCapturedImageSizeAcrossRotation() {
+        val compensation = FrozenPanPolicy.viewportScaleCompensation(
+            captureViewportWidth = 1_000,
+            captureViewportHeight = 500,
+            viewportWidth = 500,
+            viewportHeight = 1_000,
+            imageWidth = 1_000,
+            imageHeight = 500,
+        )
+
+        assertEquals(2f, compensation, 0.001f)
+        val captureFit = FrozenPanPolicy.fitScale(1_000, 500, 1_000, 500)
+        val portraitFit = FrozenPanPolicy.fitScale(500, 1_000, 1_000, 500)
+        assertEquals(captureFit, portraitFit * compensation, 0.001f)
+    }
+
+    @Test
+    fun preservedLandscapeImageCanPanImmediatelyInPortraitViewport() {
+        val result = FrozenPanPolicy.clamp(
+            offset = Offset(1_000f, 0f),
+            viewportWidth = 500,
+            viewportHeight = 1_000,
+            imageWidth = 1_000,
+            imageHeight = 500,
+            scale = 2f,
+        )
+
+        assertEquals(250f, result.x, 0.001f)
+        assertEquals(0f, result.y, 0.001f)
+    }
 }

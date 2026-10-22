@@ -7,7 +7,11 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import android.view.Surface
+import android.hardware.display.DisplayManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -19,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.Button
@@ -50,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -70,8 +76,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 
 class MainActivity : ComponentActivity() {
+    private var displayRotation by mutableIntStateOf(Surface.ROTATION_0)
+    private val displayManager by lazy { getSystemService(DisplayManager::class.java) }
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = Unit
+
+        override fun onDisplayRemoved(displayId: Int) = Unit
+
+        override fun onDisplayChanged(displayId: Int) {
+            updateDisplayRotation(displayId)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        updateDisplayRotation()
         enableEdgeToEdge()
         setContent {
             MaterialTheme {
@@ -79,15 +98,38 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    MagnifierPermissionScreen()
+                    MagnifierPermissionScreen(targetRotation = displayRotation)
                 }
             }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        updateDisplayRotation()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        displayManager.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
+        updateDisplayRotation()
+    }
+
+    override fun onStop() {
+        displayManager.unregisterDisplayListener(displayListener)
+        super.onStop()
+    }
+
+    private fun updateDisplayRotation(displayId: Int? = null) {
+        val display = window.decorView.display ?: return
+        if (displayId == null || display.displayId == displayId) {
+            displayRotation = display.rotation
         }
     }
 }
 
 @Composable
-internal fun MagnifierPermissionScreen() {
+internal fun MagnifierPermissionScreen(targetRotation: Int = Surface.ROTATION_0) {
     val context = LocalContext.current
     val activity = context as? ComponentActivity
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -176,6 +218,7 @@ internal fun MagnifierPermissionScreen() {
     when {
         permissionGranted -> {
             CameraPreviewContent(
+                targetRotation = targetRotation,
                 retryToken = retryToken,
                 frameError = frameError,
                 onFrameError = { frameError = it },
@@ -233,6 +276,7 @@ internal fun MagnifierPermissionScreen() {
 
 @Composable
 private fun CameraPreviewContent(
+    targetRotation: Int,
     retryToken: Int,
     frameError: CameraError?,
     onFrameError: (CameraError) -> Unit,
@@ -247,6 +291,8 @@ private fun CameraPreviewContent(
     val frameStore = remember { LatestFrameStore<Bitmap> { bitmap -> bitmap.recycle() } }
     var previewView by remember { mutableStateOf<androidx.camera.view.PreviewView?>(null) }
     var previewBound by remember { mutableStateOf(false) }
+    var viewportWidth by remember { mutableIntStateOf(0) }
+    var viewportHeight by remember { mutableIntStateOf(0) }
     var previewStreamObserver by remember {
         mutableStateOf<androidx.lifecycle.Observer<androidx.camera.view.PreviewView.StreamState>?>(null)
     }
@@ -259,6 +305,8 @@ private fun CameraPreviewContent(
     var savedZoomRatio by rememberSaveable { mutableFloatStateOf(1f) }
     var frozenZoomRatio by remember { mutableFloatStateOf(1f) }
     var frozenBaseZoomRatio by remember { mutableFloatStateOf(1f) }
+    var frozenCaptureViewportWidth by remember { mutableIntStateOf(0) }
+    var frozenCaptureViewportHeight by remember { mutableIntStateOf(0) }
     var frozenPanOffset by remember { mutableStateOf(Offset.Zero) }
     val scope = rememberCoroutineScope()
     var frozenPanFlingJob by remember { mutableStateOf<Job?>(null) }
@@ -277,6 +325,17 @@ private fun CameraPreviewContent(
     val latestIsCapturingStill = rememberUpdatedState(isCapturingStill)
     val latestFrozenFrame = rememberUpdatedState(frozenFrame)
     val latestPreviewView = rememberUpdatedState(previewView)
+    val frozenRenderScale = frozenFrame?.let { frame ->
+        val viewportCompensation = FrozenPanPolicy.viewportScaleCompensation(
+            captureViewportWidth = frozenCaptureViewportWidth,
+            captureViewportHeight = frozenCaptureViewportHeight,
+            viewportWidth = viewportWidth,
+            viewportHeight = viewportHeight,
+            imageWidth = frame.width,
+            imageHeight = frame.height,
+        )
+        (frozenZoomRatio / frozenBaseZoomRatio).coerceAtLeast(1f) * viewportCompensation
+    } ?: 1f
     val currentZoomErrorHandler: (CameraError) -> Unit = { error ->
         if (error == CameraError.ZoomFailed) zoomErrorVisible = true else onCameraError(error)
     }
@@ -295,6 +354,8 @@ private fun CameraPreviewContent(
         } else {
             frozenBaseZoomRatio = savedZoomRatio
             frozenZoomRatio = savedZoomRatio
+            frozenCaptureViewportWidth = viewportWidth
+            frozenCaptureViewportHeight = viewportHeight
             frozenPanOffset = Offset.Zero
             frozenFrame = fallback
             isCapturingStill = false
@@ -319,6 +380,8 @@ private fun CameraPreviewContent(
             val trace = FreezeTiming.start()
             frozenBaseZoomRatio = savedZoomRatio
             frozenZoomRatio = savedZoomRatio
+            frozenCaptureViewportWidth = viewportWidth
+            frozenCaptureViewportHeight = viewportHeight
             frozenPanOffset = Offset.Zero
             tapFocusPosition = tapPosition
             focusLocked = null
@@ -365,6 +428,20 @@ private fun CameraPreviewContent(
             kotlinx.coroutines.delay(1_800)
             zoomErrorVisible = false
         }
+    }
+    LaunchedEffect(targetRotation) {
+        previewController.updateTargetRotation(targetRotation)
+    }
+    LaunchedEffect(frozenFrame, frozenRenderScale, viewportWidth, viewportHeight) {
+        val frame = frozenFrame ?: return@LaunchedEffect
+        frozenPanOffset = FrozenPanPolicy.clamp(
+            offset = frozenPanOffset,
+            viewportWidth = viewportWidth,
+            viewportHeight = viewportHeight,
+            imageWidth = frame.width,
+            imageHeight = frame.height,
+            scale = frozenRenderScale,
+        )
     }
     LaunchedEffect(torchNotice) {
         if (torchNotice != 0) {
@@ -479,7 +556,14 @@ private fun CameraPreviewContent(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged {
+                viewportWidth = it.width
+                viewportHeight = it.height
+            },
+    ) {
         AndroidCameraPreview(
             modifier = Modifier.fillMaxSize(),
             onPreviewViewCreated = { previewView = it },
@@ -548,30 +632,40 @@ private fun CameraPreviewContent(
                 frame = frame,
                 zoomRatio = frozenZoomRatio,
                 baseZoomRatio = frozenBaseZoomRatio,
+                viewportScaleCompensation = FrozenPanPolicy.viewportScaleCompensation(
+                    captureViewportWidth = frozenCaptureViewportWidth,
+                    captureViewportHeight = frozenCaptureViewportHeight,
+                    viewportWidth = viewportWidth,
+                    viewportHeight = viewportHeight,
+                    imageWidth = frame.width,
+                    imageHeight = frame.height,
+                ),
                 panOffset = frozenPanOffset,
                 isRebinding = isRebindingAfterFreeze,
                 isCapturingStill = isCapturingStill,
                 rebindError = cameraError,
                 onZoom = { scale ->
                     val bounds = zoomState ?: return@FrozenFrameContent
+                    val previousZoomRatio = frozenZoomRatio
                     val frozenMinimum = maxOf(bounds.minZoomRatio, frozenBaseZoomRatio)
                     val ratio = ZoomPolicy.ratioAfterGesture(
-                        currentRatio = frozenZoomRatio,
+                        currentRatio = previousZoomRatio,
                         gestureScale = scale,
                         minRatio = frozenMinimum,
                         maxRatio = bounds.maxZoomRatio,
                     )
+                    val previousRenderScale = frozenRenderScale
                     frozenZoomRatio = ratio
                     savedZoomRatio = ratio
                     frozenPanFlingJob?.cancel()
                     frozenPanFlingJob = null
                     frozenPanOffset = FrozenPanPolicy.clamp(
                         offset = frozenPanOffset,
-                        viewportWidth = previewView?.width ?: 0,
-                        viewportHeight = previewView?.height ?: 0,
+                        viewportWidth = viewportWidth,
+                        viewportHeight = viewportHeight,
                         imageWidth = frame.width,
                         imageHeight = frame.height,
-                        scale = (ratio / frozenBaseZoomRatio).coerceAtLeast(1f),
+                        scale = previousRenderScale * (ratio / previousZoomRatio),
                     )
                 },
                 onPan = { delta ->
@@ -579,11 +673,11 @@ private fun CameraPreviewContent(
                     frozenPanFlingJob = null
                     frozenPanOffset = FrozenPanPolicy.clamp(
                         offset = frozenPanOffset + delta,
-                        viewportWidth = previewView?.width ?: 0,
-                        viewportHeight = previewView?.height ?: 0,
+                        viewportWidth = viewportWidth,
+                        viewportHeight = viewportHeight,
                         imageWidth = frame.width,
                         imageHeight = frame.height,
-                        scale = (frozenZoomRatio / frozenBaseZoomRatio).coerceAtLeast(1f),
+                        scale = frozenRenderScale,
                     )
                 },
                 onPanFling = { velocity ->
@@ -606,11 +700,11 @@ private fun CameraPreviewContent(
                                 )
                                 val bounded = FrozenPanPolicy.clamp(
                                     offset = proposed,
-                                    viewportWidth = previewView?.width ?: 0,
-                                    viewportHeight = previewView?.height ?: 0,
+                                    viewportWidth = viewportWidth,
+                                    viewportHeight = viewportHeight,
                                     imageWidth = frame.width,
                                     imageHeight = frame.height,
-                                    scale = (frozenZoomRatio / frozenBaseZoomRatio).coerceAtLeast(1f),
+                                    scale = frozenRenderScale,
                                 )
                                 frozenPanOffset = bounded
                                 if (bounded != proposed || elapsedMillis >= FrozenPanPolicy.FLING_DURATION_MILLIS) {
@@ -793,6 +887,7 @@ private fun FrozenFrameContent(
     frame: Bitmap,
     zoomRatio: Float,
     baseZoomRatio: Float,
+    viewportScaleCompensation: Float,
     panOffset: Offset,
     isRebinding: Boolean,
     isCapturingStill: Boolean,
@@ -811,6 +906,7 @@ private fun FrozenFrameContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(Color.Black)
             .clipToBounds()
             .pointerInput(frame, isRebinding, isCapturingStill, rebindError) {
                 detectMagnifierGestures(
@@ -836,7 +932,8 @@ private fun FrozenFrameContent(
             bitmap = frame.asImageBitmap(),
             contentDescription = stringResource(R.string.frozen_status),
             modifier = Modifier.fillMaxSize().graphicsLayer {
-                val relativeZoom = (zoomRatio / baseZoomRatio).coerceAtLeast(1f)
+                val relativeZoom = (zoomRatio / baseZoomRatio).coerceAtLeast(1f) *
+                    viewportScaleCompensation
                 scaleX = relativeZoom
                 scaleY = relativeZoom
                 translationX = panOffset.x
