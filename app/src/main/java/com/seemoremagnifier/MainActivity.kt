@@ -75,6 +75,7 @@ import com.seemoremagnifier.domain.magnifier.ZoomPolicy
 import com.seemoremagnifier.domain.magnifier.FrozenPanPolicy
 import com.seemoremagnifier.ui.magnifier.CameraError
 import com.seemoremagnifier.ui.magnifier.LiveGesturePolicy
+import com.seemoremagnifier.ui.magnifier.magnifierAccessibilitySemantics
 import com.seemoremagnifier.ui.magnifier.detectMagnifierGestures
 import androidx.camera.core.ZoomState
 import kotlinx.coroutines.launch
@@ -155,6 +156,7 @@ internal fun MagnifierPermissionScreen(targetRotation: Int = Surface.ROTATION_0)
         mutableStateOf(!permissionGranted && permissionPreferences.getBoolean("requested", false))
     }
     var cameraError by remember { mutableStateOf<CameraError?>(null) }
+    var retryCameraTrigger by remember { mutableIntStateOf(0) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -204,6 +206,8 @@ internal fun MagnifierPermissionScreen(targetRotation: Int = Surface.ROTATION_0)
                 onCameraError = { cameraError = it },
                 onCameraReady = { cameraError = null },
                 cameraError = cameraError,
+                retryCameraTrigger = retryCameraTrigger,
+                onRetryCamera = { retryCameraTrigger++ },
             )
         }
 
@@ -228,6 +232,8 @@ private fun CameraPreviewContent(
     cameraError: CameraError?,
     onCameraError: (CameraError) -> Unit,
     onCameraReady: () -> Unit,
+    retryCameraTrigger: Int,
+    onRetryCamera: () -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -285,6 +291,7 @@ private fun CameraPreviewContent(
     val latestIsCapturingStill = rememberUpdatedState(isCapturingStill)
     val latestFrozenFrame = rememberUpdatedState(frozenFrame)
     val latestPreviewView = rememberUpdatedState(previewView)
+    val latestCameraError = rememberUpdatedState(cameraError)
     val frozenRenderScale = frozenFrame?.let { frame ->
         val viewportCompensation = FrozenPanPolicy.viewportScaleCompensation(
             captureViewportWidth = frozenCaptureViewportWidth,
@@ -478,6 +485,28 @@ private fun CameraPreviewContent(
         )
     }
 
+    LaunchedEffect(retryCameraTrigger) {
+        if (retryCameraTrigger > 0 && latestCameraError.value != null && frozenFrame == null) {
+            val view = previewView ?: return@LaunchedEffect
+            onCameraReady()
+            previewBound = false
+            previewController.bind(
+                lifecycleOwner = lifecycleOwner,
+                previewView = view,
+                requestedZoomRatio = savedZoomRatio,
+                frameStore = frameStore,
+                onBound = handleCameraBound,
+                onTorchAvailability = { available ->
+                    torchAvailable = available
+                    if (!available) torchEnabled = false
+                },
+                onZoomState = { zoomState = it },
+                onFrameError = {},
+                onError = currentZoomErrorHandler,
+            )
+        }
+    }
+
     val resumeFrozenFrame = {
         if (!isRebindingAfterFreeze && frozenFrame != null) {
             showFrozenBorder = false
@@ -507,6 +536,31 @@ private fun CameraPreviewContent(
             )
         }
     }
+    val retryFrozenFrame = {
+        if (cameraError != null && !isRebindingAfterFreeze) {
+            onCameraReady()
+            isRebindingAfterFreeze = true
+            previewBound = false
+            previewController.rebind(
+                requestedZoomRatio = savedZoomRatio,
+                onBound = handleCameraBound,
+                onTorchAvailability = { available ->
+                    torchAvailable = available
+                    if (!available) torchEnabled = false
+                },
+                onZoomState = { zoomState = it },
+                onFrameError = {},
+                onError = { error ->
+                    previewStreamObserver?.let { observer ->
+                        previewView?.previewStreamState?.removeObserver(observer)
+                        previewStreamObserver = null
+                    }
+                    isRebindingAfterFreeze = false
+                    onCameraError(error)
+                },
+            )
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -524,6 +578,17 @@ private fun CameraPreviewContent(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .magnifierAccessibilitySemantics(
+                        contentDescription = stringResource(R.string.live_magnifier_description),
+                        stateDescription = stringResource(
+                            R.string.magnifier_state_live,
+                            zoomState?.zoomRatio ?: savedZoomRatio,
+                        ),
+                        actionLabel = if (isCapturingStill) null else {
+                            stringResource(R.string.freeze_image_action)
+                        },
+                        onAction = { latestLiveCaptureHandler.value(Offset.Zero, false) },
+                    )
                     .pointerInput(previewController) {
                         detectMagnifierGestures(
                             onZoom = { scale ->
@@ -561,6 +626,26 @@ private fun CameraPreviewContent(
                     },
             )
         }
+        if (cameraError != null && frozenFrame == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .magnifierAccessibilitySemantics(
+                        contentDescription = stringResource(R.string.live_magnifier_description),
+                        stateDescription = stringResource(
+                            R.string.magnifier_state_error,
+                            stringResource(
+                                R.string.magnifier_state_live,
+                                zoomState?.zoomRatio ?: savedZoomRatio,
+                            ),
+                            stringResource(cameraError.messageRes),
+                        ),
+                        actionLabel = stringResource(R.string.retry_camera),
+                        announceStateChange = true,
+                        onAction = onRetryCamera,
+                    ),
+            )
+        }
         frozenFrame?.let { frame ->
             FrozenFrameContent(
                 frame = frame,
@@ -578,6 +663,23 @@ private fun CameraPreviewContent(
                 isRebinding = isRebindingAfterFreeze,
                 isCapturingStill = isCapturingStill,
                 rebindError = cameraError,
+                semanticsContentDescription = stringResource(R.string.frozen_magnifier_description),
+                semanticsStateDescription = if (cameraError == null) {
+                    stringResource(R.string.magnifier_state_frozen, frozenZoomRatio)
+                } else {
+                    stringResource(
+                        R.string.magnifier_state_error,
+                        stringResource(R.string.magnifier_state_frozen, frozenZoomRatio),
+                        stringResource(cameraError.messageRes),
+                    )
+                },
+                semanticsActionLabel = when {
+                    cameraError != null -> stringResource(R.string.retry_camera)
+                    isRebindingAfterFreeze -> null
+                    else -> stringResource(R.string.resume_live_preview_action)
+                },
+                semanticsAnnounceStateChange = cameraError != null,
+                onSemanticsAction = if (cameraError == null) resumeFrozenFrame else retryFrozenFrame,
                 onZoom = { scale ->
                     val bounds = zoomState ?: return@FrozenFrameContent
                     val previousZoomRatio = frozenZoomRatio
@@ -784,6 +886,11 @@ private fun FrozenFrameContent(
     isRebinding: Boolean,
     isCapturingStill: Boolean,
     rebindError: CameraError?,
+    semanticsContentDescription: String,
+    semanticsStateDescription: String,
+    semanticsActionLabel: String?,
+    semanticsAnnounceStateChange: Boolean,
+    onSemanticsAction: () -> Unit,
     onZoom: (Float) -> Unit,
     onPan: (Offset) -> Unit,
     onPanFling: (Offset) -> Unit,
@@ -800,6 +907,13 @@ private fun FrozenFrameContent(
             .fillMaxSize()
             .background(Color.Black)
             .clipToBounds()
+            .magnifierAccessibilitySemantics(
+                contentDescription = semanticsContentDescription,
+                stateDescription = semanticsStateDescription,
+                actionLabel = semanticsActionLabel,
+                announceStateChange = semanticsAnnounceStateChange,
+                onAction = onSemanticsAction,
+            )
             .pointerInput(frame, isRebinding, isCapturingStill, rebindError) {
                 detectMagnifierGestures(
                     onZoom = { scale ->
@@ -1084,7 +1198,7 @@ private fun AndroidCameraPreview(
                 scaleType = androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
                 // Use TextureView so the Compose gesture/indicator overlay shares the same window layer.
                 implementationMode = androidx.camera.view.PreviewView.ImplementationMode.COMPATIBLE
-                contentDescription = context.getString(R.string.live_camera_preview_description)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                 onPreviewViewCreated(this)
             }
         },

@@ -27,6 +27,13 @@
     <string name="frozen_status">Frozen</string>
     <string name="tap_to_resume">Tap anywhere to resume the live view</string>
     <string name="resume_live_view">Resume live view</string>
+    <string name="live_magnifier_description">Live camera magnifier</string>
+    <string name="frozen_magnifier_description">Frozen magnified image</string>
+    <string name="magnifier_state_live">Live, %1$.1fx zoom</string>
+    <string name="magnifier_state_frozen">Frozen, %1$.1fx zoom</string>
+    <string name="magnifier_state_error">%1$s. Camera error: %2$s</string>
+    <string name="freeze_image_action">Freeze image</string>
+    <string name="resume_live_preview_action">Resume live preview</string>
     <string name="camera_rebinding">Resuming live camera…</string>
     <string name="gesture_help_button">Help</string>
     <string name="gesture_help_title">Using the magnifier</string>

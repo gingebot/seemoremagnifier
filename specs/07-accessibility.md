@@ -16,8 +16,7 @@ Make the magnifier usable with TalkBack, large system settings, high-contrast ov
 - Add semantic custom actions for freeze and resume.
 - Add accessible retry action for errors.
 - Add readable zoom indicator and frozen banner.
-- Add optional haptic feedback with system/user capability checks.
-- Respect system font scale, display scaling, touch exploration, and reduced-motion preferences.
+- Respect system font scale, display scaling, and touch exploration.
 
 ## Requirements
 
@@ -36,7 +35,6 @@ Make the magnifier usable with TalkBack, large system settings, high-contrast ov
 - Error and retry states are accessible.
 - Large font and display scaling preserve essential controls and status.
 - High-contrast overlays remain readable over representative camera content.
-- Haptics are optional and do not block the primary interaction.
 
 ## Tests and Device Validation
 
@@ -57,5 +55,5 @@ Make the magnifier usable with TalkBack, large system settings, high-contrast ov
 - [ ] Live/frozen semantics implemented.
 - [ ] Freeze/resume custom action implemented.
 - [ ] Accessible error/retry behavior implemented.
-- [ ] High-contrast overlays and optional haptics implemented.
+- [ ] High-contrast overlays implemented.
 - [ ] TalkBack and large-display validation completed.

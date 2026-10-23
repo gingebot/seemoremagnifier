@@ -293,7 +293,6 @@ Gesture behavior:
 - High-contrast overlays with sufficient contrast against the camera image.
 - Large, readable zoom indicator.
 - Clear and persistent “Frozen” status while frozen.
-- Optional haptic feedback for freeze/unfreeze, disabled when the user has disabled haptics or the device cannot provide them.
 - No essential state communicated by color alone.
 
 ### 8.2 Interaction accessibility
@@ -306,7 +305,7 @@ The main content exposes semantics that include:
 - An accessible retry action for camera errors.
 - Announcements when freeze/unfreeze completes and when zoom reaches a limit, without excessive repeated announcements.
 
-The app respects system font scale, display scaling, TalkBack/touch exploration, and reduced-motion preferences. `AccessibilityConfig` is not a required persisted settings object in v1; custom accessibility preferences can be added with the future settings feature.
+The app respects system font scale, display scaling, and TalkBack/touch exploration. `AccessibilityConfig` is not a required persisted settings object in v1; custom accessibility preferences can be added with the future settings feature.
 
 ---
 
