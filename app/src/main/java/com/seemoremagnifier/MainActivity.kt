@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -77,6 +78,7 @@ import com.seemoremagnifier.ui.magnifier.LiveGesturePolicy
 import com.seemoremagnifier.ui.magnifier.detectMagnifierGestures
 import androidx.camera.core.ZoomState
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 
 class MainActivity : ComponentActivity() {
@@ -250,6 +252,8 @@ private fun CameraPreviewContent(
     var torchEnabled by remember { mutableStateOf(false) }
     var restoreTorchAfterResume by remember { mutableStateOf(false) }
     var torchTogglePending by remember { mutableStateOf(false) }
+    var torchFeedbackTrigger by remember { mutableIntStateOf(0) }
+    var torchFeedbackEnabled by remember { mutableStateOf(false) }
     var savedZoomRatio by rememberSaveable { mutableFloatStateOf(1f) }
     var frozenZoomRatio by remember { mutableFloatStateOf(1f) }
     var frozenBaseZoomRatio by remember { mutableFloatStateOf(1f) }
@@ -540,7 +544,11 @@ private fun CameraPreviewContent(
                                 val requestedTorchState = !latestTorchEnabled.value
                                 previewController.toggleTorch(requestedTorchState) { succeeded ->
                                     torchTogglePending = false
-                                    torchEnabled = succeeded && requestedTorchState
+                                    if (succeeded) {
+                                        torchEnabled = requestedTorchState
+                                        torchFeedbackEnabled = requestedTorchState
+                                        torchFeedbackTrigger++
+                                    }
                                 }
                             },
                         )
@@ -645,6 +653,12 @@ private fun CameraPreviewContent(
             trigger = freezeFlashTrigger,
             showBorder = showFrozenBorder,
         )
+        if (torchFeedbackTrigger > 0) {
+            TorchToggleFeedback(
+                trigger = torchFeedbackTrigger,
+                isOn = torchFeedbackEnabled,
+            )
+        }
         if (showFocusIndicator && isCapturingStill) {
             FocusAcquisitionIndicator(
                 position = focusPointPosition,
@@ -945,6 +959,70 @@ private fun FreezeScreenFlash(
                 color = Color.White,
                 style = Stroke(width = strokeWidth),
             )
+        }
+    }
+}
+
+@Composable
+private fun TorchToggleFeedback(
+    trigger: Int,
+    isOn: Boolean,
+) {
+    val alpha = remember { Animatable(0f) }
+    val scale = remember { Animatable(0.72f) }
+
+    LaunchedEffect(trigger) {
+        alpha.snapTo(0.86f)
+        scale.snapTo(0.72f)
+        launch {
+            scale.animateTo(1.08f, animationSpec = tween(durationMillis = 700))
+        }
+        delay(300)
+        alpha.animateTo(0f, animationSpec = tween(durationMillis = 500))
+    }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Canvas(
+            modifier = Modifier
+                .size(384.dp)
+                .graphicsLayer {
+                    this.alpha = alpha.value
+                    scaleX = scale.value
+                    scaleY = scale.value
+                },
+        ) {
+            val iconColor = Color.White
+            val torch = Path().apply {
+                moveTo(size.width * 0.31f, size.height * 0.22f)
+                lineTo(size.width * 0.69f, size.height * 0.22f)
+                lineTo(size.width * 0.61f, size.height * 0.42f)
+                lineTo(size.width * 0.57f, size.height * 0.47f)
+                lineTo(size.width * 0.57f, size.height * 0.76f)
+                lineTo(size.width * 0.43f, size.height * 0.76f)
+                lineTo(size.width * 0.43f, size.height * 0.47f)
+                lineTo(size.width * 0.39f, size.height * 0.42f)
+                close()
+            }
+            drawPath(path = torch, color = iconColor)
+            if (isOn) {
+                val rayWidth = size.width * 0.045f
+                val rays = listOf(
+                    Offset(size.width * 0.5f, size.height * 0.04f) to
+                        Offset(size.width * 0.5f, size.height * 0.13f),
+                    Offset(size.width * 0.16f, size.height * 0.12f) to
+                        Offset(size.width * 0.23f, size.height * 0.19f),
+                    Offset(size.width * 0.84f, size.height * 0.12f) to
+                        Offset(size.width * 0.77f, size.height * 0.19f),
+                )
+                rays.forEach { (start, end) ->
+                    drawLine(
+                        color = iconColor,
+                        start = start,
+                        end = end,
+                        strokeWidth = rayWidth,
+                    )
+                }
+            }
         }
     }
 }
