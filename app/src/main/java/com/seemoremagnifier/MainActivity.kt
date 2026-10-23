@@ -687,15 +687,21 @@ private fun CameraPreviewContent(
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp),
             )
         }
-        if ((previewBound && cameraError == null && !isCapturingStill) || frozenFrame != null) {
-            Button(
+        if ((previewBound && cameraError == null) || frozenFrame != null) {
+            Surface(
                 onClick = { showGestureGuide = true },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .statusBarsPadding()
-                    .padding(12.dp),
+                    .padding(top = 56.dp, end = 12.dp),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                contentColor = MaterialTheme.colorScheme.onSurface,
             ) {
-                Text(stringResource(R.string.gesture_help_button))
+                Text(
+                    text = stringResource(R.string.gesture_help_button),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
             }
         }
         if (showGestureGuide) {
@@ -895,23 +901,19 @@ private fun FocusAcquisitionIndicator(
                 }
             }
         }
-        Surface(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ) {
-            Text(
-                text = stringResource(
-                    when (focusLocked) {
-                        true -> R.string.camera_focus_locked
-                        false -> R.string.camera_focus_timeout
-                        null -> R.string.camera_hold_steady
-                    },
-                ),
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                style = MaterialTheme.typography.titleMedium,
-            )
+        if (focusLocked == false) {
+            Surface(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ) {
+                Text(
+                    text = stringResource(R.string.camera_focus_timeout),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
         }
     }
 }
