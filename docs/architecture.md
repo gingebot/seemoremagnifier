@@ -230,11 +230,11 @@ The implementation must handle devices with no available rear camera as a camera
 4. Replaces the previous candidate frame in `LatestFrameStore`.
 5. Closes every `ImageProxy`, including error paths.
 
-When the user taps freeze:
+When the user freezes the live preview:
 
 1. Keep the live preview and analysis running while capture is pending, show a white screen flash (currently 80% peak opacity fading over 450 ms), and ignore repeated taps/pinch zoom.
-2. By default, do not request tap-point autofocus or metering: capture immediately using the camera's current focus state. This avoids waiting for a focus result and takes advantage of autofocus already running during preview.
-3. `FreezeCaptureOptions.ENABLE_TAP_POINT_FOCUS` retains the optional focus-at-tap path. When enabled, map the tap position through `PreviewView.meteringPointFactory`, call `CameraControl.startFocusAndMetering`, and capture on focus completion or after the short timeout. Focus brackets are shown only in this mode. This internal development switch can later be replaced by a persisted user preference exposed in an options menu; it is not currently a user setting.
+2. A normal tap skips point metering and captures immediately using the camera's current focus state, taking advantage of autofocus already running during preview.
+3. A stationary long press shows the animated focus reticle/status, requests autofocus/metering at the pressed position through `PreviewView.meteringPointFactory`, then captures on focus completion or after the short timeout. The reticle converges on the touch point, turns green on focus lock, and pulses amber if focus is not confirmed. Movement beyond touch slop or a second pointer cancels long-press recognition. Focus failure does not block freezing.
 4. Configure `ImageCapture` with `CAPTURE_MODE_MINIMIZE_LATENCY`. Decode the still off the main thread, correct orientation, and center-crop to the preview aspect ratio. Decode sampling bounds the still to 2560 pixels per dimension. The still remains higher-resolution than the capped analysis fallback, while latency mode favors capture speed over maximum quality; validate detail on target devices.
 5. On successful still delivery, show that still as the frozen image and unbind camera use cases. On failure, freeze the latest analysis candidate instead and report the fallback notice.
 

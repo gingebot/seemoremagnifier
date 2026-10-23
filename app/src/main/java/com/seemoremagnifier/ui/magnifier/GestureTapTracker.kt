@@ -5,6 +5,7 @@ internal class GestureTapTracker(
     private val touchSlop: Float,
 ) {
     private var tapCancelled = false
+    private var longPressRecognized = false
 
     init {
         require(touchSlop.isFinite() && touchSlop >= 0f) {
@@ -25,6 +26,15 @@ internal class GestureTapTracker(
     fun cancel() {
         tapCancelled = true
     }
+
+    fun recognizeLongPress() {
+        longPressRecognized = true
+        tapCancelled = true
+    }
+
+    fun canRecognizeLongPress(): Boolean = !tapCancelled
+
+    fun wasLongPressRecognized(): Boolean = longPressRecognized
 
     fun canFinishAsTap(): Boolean = !tapCancelled
 }

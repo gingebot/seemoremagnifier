@@ -74,4 +74,27 @@ class GestureTapTrackerTest {
 
         assertFalse(tracker.canFinishAsTap())
     }
+
+    @Test
+    fun stationaryGestureCanBecomeLongPressWithoutFinishingAsTap() {
+        val tracker = GestureTapTracker(touchSlop = 10f)
+        tracker.observe(pointerCount = 1, distanceFromDown = 0f)
+
+        assertTrue(tracker.canRecognizeLongPress())
+        tracker.recognizeLongPress()
+
+        assertFalse(tracker.canRecognizeLongPress())
+        assertFalse(tracker.canFinishAsTap())
+    }
+
+    @Test
+    fun movementAndMultiplePointersPreventLongPress() {
+        val movedTracker = GestureTapTracker(touchSlop = 10f)
+        movedTracker.observe(pointerCount = 1, distanceFromDown = 11f)
+        assertFalse(movedTracker.canRecognizeLongPress())
+
+        val multiTouchTracker = GestureTapTracker(touchSlop = 10f)
+        multiTouchTracker.observe(pointerCount = 2, distanceFromDown = 0f)
+        assertFalse(multiTouchTracker.canRecognizeLongPress())
+    }
 }

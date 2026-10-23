@@ -43,6 +43,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.LocalContext
@@ -248,6 +249,10 @@ private fun CameraPreviewContent(
     var freezeFlashTrigger by remember { mutableIntStateOf(0) }
     var showFrozenBorder by remember { mutableStateOf(false) }
     var isCapturingStill by remember { mutableStateOf(false) }
+    var showFocusIndicator by remember { mutableStateOf(false) }
+    var focusPointPosition by remember { mutableStateOf(Offset.Zero) }
+    var focusLocked by remember { mutableStateOf<Boolean?>(null) }
+    var focusAnimationKey by remember { mutableIntStateOf(0) }
     var isRebindingAfterFreeze by remember { mutableStateOf(false) }
     val latestZoomState = rememberUpdatedState(zoomState)
     val latestTorchEnabled = rememberUpdatedState(torchEnabled)
@@ -304,8 +309,14 @@ private fun CameraPreviewContent(
             FreezeTiming.mark(trace, "frozen-frame-next-compose-frame")
         }
     }
-    val liveTapHandler: (Offset) -> Unit = { tapPosition ->
+    val liveCaptureHandler: (Offset, Boolean) -> Unit = { tapPosition, focusAtPoint ->
         if (cameraError == null && frozenFrame == null && !isCapturingStill) {
+            showFocusIndicator = focusAtPoint
+            if (focusAtPoint) {
+                focusPointPosition = tapPosition
+                focusLocked = null
+                focusAnimationKey++
+            }
             restoreTorchAfterResume = torchEnabled
             torchTogglePending = false
             val trace = FreezeTiming.start()
@@ -314,23 +325,27 @@ private fun CameraPreviewContent(
             frozenCaptureViewportWidth = viewportWidth
             frozenCaptureViewportHeight = viewportHeight
             frozenPanOffset = Offset.Zero
-            showFrozenBorder = true
+            showFrozenBorder = !focusAtPoint
             freezeFlashTrigger++
             isCapturingStill = true
             val view = previewView
             previewController.focusAndCapture(
                 trace = trace,
+                focusAtPoint = focusAtPoint,
                 x = tapPosition.x,
                 y = tapPosition.y,
                 previewWidth = view?.width ?: 0,
                 previewHeight = view?.height ?: 0,
-                onFocusResult = {},
+                onFocusResult = { focused ->
+                    if (focusAtPoint) focusLocked = focused
+                },
                 onCaptured = { captured ->
                     frameStore.freezeLatest()?.let { if (!it.isRecycled) it.recycle() }
                     frameStore.pause()
                     frozenPanOffset = Offset.Zero
                     frozenFrame = captured
                     frozenFrameTrace = trace
+                    showFrozenBorder = true
                     isCapturingStill = false
                     torchEnabled = false
                     torchAvailable = false
@@ -348,7 +363,7 @@ private fun CameraPreviewContent(
             )
         }
     }
-    val latestLiveTapHandler = rememberUpdatedState(liveTapHandler)
+    val latestLiveCaptureHandler = rememberUpdatedState(liveCaptureHandler)
 
     LaunchedEffect(targetRotation) {
         previewController.updateTargetRotation(targetRotation)
@@ -496,7 +511,8 @@ private fun CameraPreviewContent(
                                     onError = latestZoomErrorHandler.value,
                                 )
                             },
-                            onTap = { latestLiveTapHandler.value(it) },
+                            onTap = { latestLiveCaptureHandler.value(it, false) },
+                            onLongPress = { latestLiveCaptureHandler.value(it, true) },
                             onSwipeUp = {
                                 if (latestIsCapturingStill.value) return@detectMagnifierGestures
                                 if (!latestTorchAvailable.value) return@detectMagnifierGestures
@@ -610,6 +626,15 @@ private fun CameraPreviewContent(
             trigger = freezeFlashTrigger,
             showBorder = showFrozenBorder,
         )
+        if (showFocusIndicator && isCapturingStill) {
+            FocusAcquisitionIndicator(
+                position = focusPointPosition,
+                previewWidth = previewView?.width ?: 0,
+                previewHeight = previewView?.height ?: 0,
+                focusLocked = focusLocked,
+                animationKey = focusAnimationKey,
+            )
+        }
         if (frozenFrame == null) {
             zoomState?.let { currentZoom ->
                 ZoomIndicator(
@@ -685,6 +710,92 @@ private fun FrozenFrameContent(
             },
             contentScale = androidx.compose.ui.layout.ContentScale.Fit,
         )
+    }
+}
+
+@Composable
+private fun FocusAcquisitionIndicator(
+    position: Offset,
+    previewWidth: Int,
+    previewHeight: Int,
+    focusLocked: Boolean?,
+    animationKey: Int,
+) {
+    val convergence = remember { Animatable(0f) }
+    val pulse = remember { Animatable(0f) }
+    val density = LocalDensity.current
+
+    LaunchedEffect(animationKey) {
+        convergence.snapTo(0f)
+        convergence.animateTo(1f, animationSpec = tween(durationMillis = 560))
+    }
+    LaunchedEffect(focusLocked, animationKey) {
+        pulse.snapTo(0f)
+        if (focusLocked == false) {
+            while (true) {
+                pulse.animateTo(1f, tween(durationMillis = 680))
+                pulse.animateTo(0f, tween(durationMillis = 680))
+            }
+        }
+    }
+
+    val bracketColor = when (focusLocked) {
+        true -> Color(0xFF65E695)
+        false -> Color(0xFFFFC15A)
+        null -> Color.White
+    }
+    val outerRadius = with(density) { 68.dp.toPx() }
+    val innerRadius = with(density) { 38.dp.toPx() }
+    val radius = outerRadius + (innerRadius - outerRadius) * convergence.value +
+        pulse.value * with(density) { 5.dp.toPx() }
+    val cornerLength = with(density) { 20.dp.toPx() }
+    val strokeWidth = with(density) { 4.dp.toPx() }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            if (previewWidth > 0 && previewHeight > 0) {
+                val center = Offset(
+                    x = position.x.coerceIn(0f, size.width),
+                    y = position.y.coerceIn(0f, size.height),
+                )
+                val alpha = if (focusLocked == false) 0.65f + pulse.value * 0.35f else 1f
+                val color = bracketColor.copy(alpha = alpha)
+                val left = center.x - radius
+                val right = center.x + radius
+                val top = center.y - radius
+                val bottom = center.y + radius
+
+                drawLine(color, Offset(left, top), Offset(left + cornerLength, top), strokeWidth)
+                drawLine(color, Offset(left, top), Offset(left, top + cornerLength), strokeWidth)
+                drawLine(color, Offset(right, top), Offset(right - cornerLength, top), strokeWidth)
+                drawLine(color, Offset(right, top), Offset(right, top + cornerLength), strokeWidth)
+                drawLine(color, Offset(left, bottom), Offset(left + cornerLength, bottom), strokeWidth)
+                drawLine(color, Offset(left, bottom), Offset(left, bottom - cornerLength), strokeWidth)
+                drawLine(color, Offset(right, bottom), Offset(right - cornerLength, bottom), strokeWidth)
+                drawLine(color, Offset(right, bottom), Offset(right, bottom - cornerLength), strokeWidth)
+                if (focusLocked == true) {
+                    drawCircle(color, radius = with(density) { 3.dp.toPx() }, center = center)
+                }
+            }
+        }
+        Surface(
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ) {
+            Text(
+                text = stringResource(
+                    when (focusLocked) {
+                        true -> R.string.camera_focus_locked
+                        false -> R.string.camera_focus_timeout
+                        null -> R.string.camera_hold_steady
+                    },
+                ),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
     }
 }
 

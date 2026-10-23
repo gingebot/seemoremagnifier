@@ -8,6 +8,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.hypot
 
 /** Shared, coordinated tap/pinch recognition for live preview and frozen content. */
@@ -18,6 +19,7 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
     onPanFling: (Offset) -> Unit = {},
     onGestureStart: () -> Unit = {},
     onSwipeUp: () -> Unit = {},
+    onLongPress: (Offset) -> Unit = {},
 ) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
@@ -30,14 +32,34 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
         var previousPosition = down.position
         var hadMultiplePointers = false
         var wasPanning = false
+        var longPressRecognized = false
+        var longPressDeadlineMillis = down.uptimeMillis + viewConfiguration.longPressTimeoutMillis
+        var longPressCheckPending = true
 
         while (true) {
-            val event = awaitPointerEvent(PointerEventPass.Main)
+            val event = if (longPressCheckPending && !hadMultiplePointers && !wasPanning) {
+                val remainingMillis = longPressDeadlineMillis - android.os.SystemClock.uptimeMillis()
+                withTimeoutOrNull(remainingMillis.coerceAtLeast(0L)) {
+                    awaitPointerEvent(PointerEventPass.Main)
+                }
+            } else {
+                awaitPointerEvent(PointerEventPass.Main)
+            }
+            if (event == null) {
+                longPressCheckPending = false
+                if (tapTracker.canRecognizeLongPress()) {
+                    longPressRecognized = true
+                    tapTracker.recognizeLongPress()
+                    onLongPress(down.position)
+                }
+                continue
+            }
             val pressed = event.changes.filter { it.pressed }
             if (pressed.isEmpty()) {
                 val released = event.changes.firstOrNull { it.id == down.id }
                 if (event.type == PointerEventType.Release &&
                     !hadMultiplePointers && released != null &&
+                    !longPressRecognized &&
                     LiveGesturePolicy.isSwipeUp(
                         start = down.position,
                         end = released.position,
@@ -55,6 +77,7 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
                 }
                 if (event.type == PointerEventType.Release &&
                     tapTracker.canFinishAsTap() &&
+                    !longPressRecognized &&
                     event.changes.none { it.isConsumed }
                 ) {
                     onTap(down.position)
@@ -71,6 +94,9 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
                 (primary.position.y - down.position.y).toDouble(),
             ).toFloat()
             tapTracker.observe(pressed.size, movement)
+            if (pressed.size > 1 || movement > viewConfiguration.touchSlop) {
+                longPressCheckPending = false
+            }
 
             if (pressed.size > 1) {
                 hadMultiplePointers = true
@@ -86,7 +112,7 @@ internal suspend fun PointerInputScope.detectMagnifierGestures(
             }
             previousPosition = primary.position
 
-            if (pressed.size > 1 || movement > viewConfiguration.touchSlop) {
+            if (longPressRecognized || pressed.size > 1 || movement > viewConfiguration.touchSlop) {
                 pressed.forEach { it.consume() }
             }
 

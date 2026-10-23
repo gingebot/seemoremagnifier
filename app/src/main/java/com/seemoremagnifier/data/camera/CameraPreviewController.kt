@@ -236,6 +236,7 @@ class CameraPreviewController(context: Context) {
 
     internal fun focusAndCapture(
         trace: FreezeTiming.Trace,
+        focusAtPoint: Boolean,
         x: Float,
         y: Float,
         previewWidth: Int,
@@ -327,8 +328,8 @@ class CameraPreviewController(context: Context) {
             }
         }
 
-        if (!FreezeCaptureOptions.ENABLE_TAP_POINT_FOCUS) {
-            FreezeTiming.mark(trace, "focus-skipped tapPointFocusDisabled")
+        if (!focusAtPoint) {
+            FreezeTiming.mark(trace, "focus-skipped immediateCapture")
             captureStill()
             return
         }
