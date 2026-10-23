@@ -30,4 +30,17 @@
     <string name="tap_to_resume">Tap anywhere to resume the live view</string>
     <string name="resume_live_view">Resume live view</string>
     <string name="camera_rebinding">Resuming live camera…</string>
+    <string name="gesture_help_button">Help</string>
+    <string name="gesture_help_title">Using the magnifier</string>
+    <string name="gesture_help_tap_title">Tap</string>
+    <string name="gesture_help_tap_description">Tap anywhere to freeze the view. Tap again to return to the live camera.</string>
+    <string name="gesture_help_hold_title">Press and hold</string>
+    <string name="gesture_help_hold_description">Press and hold on a detail to focus there, then freeze the view.</string>
+    <string name="gesture_help_pinch_title">Pinch</string>
+    <string name="gesture_help_pinch_description">Move two fingers together or apart to zoom in or out.</string>
+    <string name="gesture_help_light_title">Swipe up</string>
+    <string name="gesture_help_light_description">Swipe up on the live view to turn the camera light on or off, if available.</string>
+    <string name="gesture_help_drag_title">Move a zoomed frozen view</string>
+    <string name="gesture_help_drag_description">Drag with one finger to look around the frozen image when zoomed in.</string>
+    <string name="gesture_help_dismiss">Close</string>
 </resources>

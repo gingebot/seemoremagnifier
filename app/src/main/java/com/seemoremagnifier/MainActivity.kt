@@ -15,15 +15,21 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
@@ -222,6 +229,13 @@ private fun CameraPreviewContent(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val gestureHelpPreferences = remember(context) {
+        context.getSharedPreferences("gesture_help", Context.MODE_PRIVATE)
+    }
+    var hasDismissedGestureGuide by remember {
+        mutableStateOf(gestureHelpPreferences.getBoolean("dismissed", false))
+    }
+    var showGestureGuide by remember { mutableStateOf(false) }
     val previewController = remember(context) { CameraPreviewController(context) }
     val frameStore = remember { LatestFrameStore<Bitmap> { bitmap -> bitmap.recycle() } }
     var previewView by remember { mutableStateOf<androidx.camera.view.PreviewView?>(null) }
@@ -302,6 +316,11 @@ private fun CameraPreviewContent(
         }
     }
     val latestFallbackHandler = rememberUpdatedState(freezeWithLatestAnalysisFrame)
+    LaunchedEffect(previewBound, cameraError, hasDismissedGestureGuide) {
+        if (previewBound && cameraError == null && !hasDismissedGestureGuide) {
+            showGestureGuide = true
+        }
+    }
     LaunchedEffect(frozenFrame, frozenFrameTrace) {
         val trace = frozenFrameTrace
         if (frozenFrame != null && trace != null) {
@@ -648,6 +667,84 @@ private fun CameraPreviewContent(
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp),
             )
         }
+        if ((previewBound && cameraError == null && !isCapturingStill) || frozenFrame != null) {
+            Button(
+                onClick = { showGestureGuide = true },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(12.dp),
+            ) {
+                Text(stringResource(R.string.gesture_help_button))
+            }
+        }
+        if (showGestureGuide) {
+            GestureHelpDialog(
+                onDismiss = {
+                    showGestureGuide = false
+                    hasDismissedGestureGuide = true
+                    gestureHelpPreferences.edit().putBoolean("dismissed", true).apply()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun GestureHelpDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.gesture_help_title),
+                modifier = Modifier.clickable(onClick = onDismiss),
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 480.dp)
+                    .pointerInput(onDismiss) {
+                        detectTapGestures(onTap = { onDismiss() })
+                    }
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                GestureHelpItem(
+                    title = stringResource(R.string.gesture_help_tap_title),
+                    description = stringResource(R.string.gesture_help_tap_description),
+                )
+                GestureHelpItem(
+                    title = stringResource(R.string.gesture_help_hold_title),
+                    description = stringResource(R.string.gesture_help_hold_description),
+                )
+                GestureHelpItem(
+                    title = stringResource(R.string.gesture_help_pinch_title),
+                    description = stringResource(R.string.gesture_help_pinch_description),
+                )
+                GestureHelpItem(
+                    title = stringResource(R.string.gesture_help_light_title),
+                    description = stringResource(R.string.gesture_help_light_description),
+                )
+                GestureHelpItem(
+                    title = stringResource(R.string.gesture_help_drag_title),
+                    description = stringResource(R.string.gesture_help_drag_description),
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text(stringResource(R.string.gesture_help_dismiss))
+            }
+        },
+    )
+}
+
+@Composable
+private fun GestureHelpItem(title: String, description: String) {
+    Column {
+        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        Text(text = description, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
