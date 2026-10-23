@@ -231,6 +231,12 @@ private fun CameraPreviewContent(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val hostView = LocalView.current
+    DisposableEffect(hostView) {
+        val wasKeepingScreenOn = hostView.keepScreenOn
+        hostView.keepScreenOn = true
+        onDispose { hostView.keepScreenOn = wasKeepingScreenOn }
+    }
     val gestureHelpPreferences = remember(context) {
         context.getSharedPreferences("gesture_help", Context.MODE_PRIVATE)
     }
