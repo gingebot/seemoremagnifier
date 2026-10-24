@@ -31,6 +31,8 @@ Run on an available emulator or physical Android device:
 ./gradlew connectedDebugAndroidTest
 ```
 
+Before running this command against a connected physical phone, ask the user to confirm that the phone is unlocked, awake, and interactive. ADB connectivity alone does not confirm readiness: instrumented Compose tests can fail with missing Compose hierarchies when the phone is locked or dozing. If the user cannot confirm, defer physical-device tests and continue with device-independent checks; do not attempt to wake or unlock the phone. This confirmation is not required when tests run on an emulator.
+
 Cover at least:
 
 - Permission granted, denied, and permanently denied flows.
@@ -60,7 +62,7 @@ On a representative physical device, verify:
 
 Camera, gesture, lifecycle, and accessibility behavior must be checked on the connected physical device because these behaviors cannot be fully validated with unit tests or a generic emulator.
 
-Before touch-driven device checks, confirm the device is interactive. If it is locked or otherwise unavailable, do not attempt to unlock it or inject gestures; report the hardware check as deferred and rely on build/unit/instrumentation checks that do not require interaction.
+Before running connected tests or touch-driven device checks, get explicit user confirmation that the physical device is unlocked, awake, and interactive. If confirmation is unavailable or the device is locked/dozing, defer those checks; do not attempt to wake it, unlock it, or inject gestures. Continue with build, unit, and lint checks that do not require the device. Emulator tests remain available without phone confirmation.
 
 ## 3. Device Coverage
 

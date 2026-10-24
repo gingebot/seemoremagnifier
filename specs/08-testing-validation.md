@@ -42,9 +42,11 @@ Run from the Android project root:
 ./gradlew installDebug
 ```
 
+Before running connected tests against a physical phone, obtain explicit user confirmation that it is unlocked, awake, and interactive. ADB visibility alone is not sufficient; a locked/dozing phone can cause Compose instrumentation tests to fail because no Compose hierarchy is available. If confirmation is not available, defer physical-device tests and continue with checks that do not use the phone. Do not attempt to wake or unlock it. Emulator testing does not need this confirmation.
+
 Do not create or sign local release artifacts. Pushing a `v<versionName>` tag starts [`.github/workflows/release.yml`](../.github/workflows/release.yml), which validates the tag/version and runs unit tests, lint, and a debug build before waiting for the protected `release` environment approval. After approval, it signs the release APK/AAB using GitHub environment secrets, verifies both signatures, and publishes the artifacts with checksums to a GitHub Release. The regular CI workflow runs unit tests, lint, and a debug build; neither hosted workflow has a physical camera device. Run connected instrumented tests and complete the device checks below before creating a tag.
 
-Verify the connected device before testing with:
+After the user confirms the physical device is interactive, verify its connection with:
 
 ```bash
 adb devices -l
