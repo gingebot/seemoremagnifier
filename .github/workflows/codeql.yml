@@ -48,7 +48,7 @@ jobs:
           build-mode: manual
 
       - name: Build debug app for CodeQL
-        run: ./gradlew :app:assembleDebug --no-daemon
+        run: ./gradlew clean :app:assembleDebug --no-daemon --no-build-cache --rerun-tasks
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4
