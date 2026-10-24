@@ -38,11 +38,17 @@ jobs:
           "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-36" "build-tools;35.0.0"
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: java-kotlin
-          build-mode: autobuild
+          build-mode: manual
+
+      - name: Build debug app for CodeQL
+        run: ./gradlew :app:assembleDebug --no-daemon
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4
