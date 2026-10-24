@@ -1,0 +1,5 @@
+# Require the project maintainer to review all changes, especially release automation.
+* @gingebot
+.github/ @gingebot
+app/build.gradle.kts @gingebot
+gradle.properties @gingebot

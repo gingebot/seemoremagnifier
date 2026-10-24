@@ -39,7 +39,7 @@ Cover at least:
 - Pinch zoom works in live and frozen modes.
 - Pinch does not trigger freeze.
 - Camera rebind failure is presented correctly.
-- TalkBack semantics expose the correct state and toggle action.
+- TalkBack semantics expose the correct state, freeze/resume action, and camera-error retry action.
 - Large font and display scaling do not hide essential controls.
 
 ## 2. Physical-Device Acceptance Checks
@@ -94,7 +94,9 @@ The coverage should include:
 
 ### Before release
 
-- `assembleRelease` succeeds.
+- Before creating a `v<versionName>` tag, instrumented tests and manual physical-device/device-coverage checks are complete.
+- The tag triggers GitHub Actions to validate the version and run unit tests, lint, and a debug build before the protected release approval gate.
+- Required reviewers approve the protected GitHub `release` environment before signing credentials are accessed and the release APK/AAB are built, signature-verified, and published.
 - Full physical-device acceptance checklist passes.
 - Required device coverage is complete.
 - No release artifact or signing credential is committed.

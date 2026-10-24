@@ -61,10 +61,9 @@ Run commands from the Android project root:
 
 ```bash
 ./gradlew assembleDebug
-./gradlew assembleRelease
 ```
 
-Release signing credentials must remain outside the repository. Build artifacts must not be committed to source control.
+Do not create or sign local release artifacts. Releases are built, signed, and published by GitHub Actions when a `v<versionName>` tag is pushed. The workflow uses signing credentials from the GitHub `release` environment; credentials and build artifacts must not be committed to source control.
 
 ## 3. Local Device Deployment
 
@@ -86,7 +85,7 @@ When a specific APK must be installed directly:
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The final package name and launcher activity must be recorded when the Android project is created. Debug APKs may be installed directly with ADB. A production distribution process is out of scope until a distribution target is selected.
+The final package name and launcher activity must be recorded when the Android project is created. Debug APKs may be installed directly with ADB. The production distribution target is GitHub Releases; signed APK and AAB artifacts plus checksums are published by the release workflow.
 
 ## 4. Development Workflow
 
@@ -103,8 +102,10 @@ Do not unlock a connected device or send touch input as part of automated valida
 
 ## 5. Release Policy
 
-- Release builds must be produced with `assembleRelease`.
-- Release signing credentials must not be committed.
+- Releases are initiated only by pushing a `v<versionName>` tag and are built/published by [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+- The workflow validates the tag against `app.versionName` and `app.versionCode` in `gradle.properties`.
+- The workflow signs release APK/AAB files using the GitHub `release` environment secrets, verifies signatures, generates checksums, and publishes a GitHub Release.
+- Instrumented and physical-device acceptance checks must be completed before creating the tag. The release workflow runs its automated checks before entering the protected GitHub `release` environment; configure required reviewers so approval is required before it accesses signing secrets, signs artifacts, or publishes. The hosted workflow has no connected camera device.
+- Release signing credentials must not be committed or used for local release builds.
 - Debug and release artifacts must remain outside source control.
 - A release is not considered ready until the release checks in [`testing.md`](testing.md) pass.
-- The distribution target and signing process must be documented before the first public release.

@@ -15,8 +15,8 @@ Complete automated coverage, physical-device validation, performance checks, and
 
 - Complete unit and state-machine coverage.
 - Complete Compose/UI and instrumented coverage.
-- Run lint and debug/release builds.
-- Validate on the connected physical device.
+- Run automated checks on each change and signed release builds in GitHub Actions.
+- Run physical-device acceptance checks manually before creating a release tag.
 - Validate required device and lifecycle scenarios.
 - Measure startup, freeze latency, memory, and battery behavior.
 - Record known limitations and release readiness.
@@ -24,7 +24,9 @@ Complete automated coverage, physical-device validation, performance checks, and
 ## Requirements
 
 - Debug build, unit tests, lint, and instrumented tests must pass.
-- Release builds must succeed without repository-stored signing secrets.
+- Releases are built and published only by GitHub Actions after a `v<versionName>` tag is pushed.
+- The release workflow signs artifacts with credentials stored in the GitHub `release` environment; signing material must never be committed.
+- Required instrumented and physical-device validation must be completed before tagging. GitHub Actions runs the automated release checks before the `release` environment approval gate; configure required reviewers there so signing and publication happen only after approval.
 - Camera, lifecycle, gesture, accessibility, and cleanup behavior must be validated on a physical device.
 - Device-specific limitations must be documented before release.
 
@@ -34,20 +36,15 @@ Run from the Android project root:
 
 ```bash
 ./gradlew assembleDebug
-./gradlew test
-./gradlew lint
+./gradlew testDebugUnitTest
+./gradlew lintDebug
 ./gradlew connectedDebugAndroidTest
-./gradlew assembleRelease
 ./gradlew installDebug
 ```
 
-Verify the connected device with:
+Do not create or sign local release artifacts. Pushing a `v<versionName>` tag starts [`.github/workflows/release.yml`](../.github/workflows/release.yml), which validates the tag/version and runs unit tests, lint, and a debug build before waiting for the protected `release` environment approval. After approval, it signs the release APK/AAB using GitHub environment secrets, verifies both signatures, and publishes the artifacts with checksums to a GitHub Release. The regular CI workflow runs unit tests, lint, and a debug build; neither hosted workflow has a physical camera device. Run connected instrumented tests and complete the device checks below before creating a tag.
 
-```bash
-adb devices -l
-```
-
-The connected device must be verified with:
+Verify the connected device before testing with:
 
 ```bash
 adb devices -l
@@ -56,7 +53,8 @@ adb devices -l
 ## Acceptance Criteria
 
 - Debug build, unit tests, lint, and instrumented tests pass.
-- Release build succeeds without repository-stored signing secrets.
+- GitHub Actions produces and verifies signed release artifacts using GitHub `release` environment secrets.
+- Instrumented and physical-device acceptance checks are complete before tag creation; protected `release` environment approval is required before signing and publication.
 - Permission, preview, zoom, freeze, unfreeze, lifecycle, and error flows pass.
 - Pinch never triggers freeze/resume.
 - No `ImageProxy` remains unclosed on tested analyzer paths.
