@@ -67,6 +67,11 @@ Do not run connected-device tests against a locked or dozing phone. For full
 setup and validation instructions, see [`docs/development.md`](docs/development.md)
 and [`docs/testing.md`](docs/testing.md).
 
+GitHub Actions also runs CodeQL analysis, dependency review, and Gitleaks on
+the repository. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to respond to
+their findings and the fork pull-request scanning limitation; Dependabot
+proposes Gradle and workflow-action updates.
+
 ## Controls
 
 | Gesture | Action |
@@ -101,6 +106,7 @@ handling.
 - [Development and deployment](docs/development.md)
 - [Testing and device validation](docs/testing.md)
 - [Release procedure](docs/releasing.md)
+- [Code quality and security scanning](docs/security-scanning.md)
 - [Contribution guidelines](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [Third-party notices and artwork status](NOTICE)

@@ -23,6 +23,17 @@ Run the relevant checks locally:
 ./gradlew testDebugUnitTest lint assembleDebug --no-daemon
 ```
 
+Pull requests targeting `main` are also checked by GitHub Actions for Kotlin/
+Java security findings (CodeQL), newly introduced vulnerable dependencies
+(Dependency Review), and accidentally committed secrets (Gitleaks). Dependabot
+opens routine Gradle and GitHub Actions update pull requests. Review scanner
+findings and dependency changes before merging; do not dismiss a finding only
+to make a check pass. The Gitleaks job intentionally skips fork-originated pull
+requests because GitHub does not pass repository secrets to them; those changes
+are scanned on `main` after merge.
+For GitHub settings, scan behavior, and secret-incident response, see
+[`docs/security-scanning.md`](docs/security-scanning.md).
+
 For camera, gesture, lifecycle, or accessibility changes, also test on an
 emulator or physical Android device where practical. Before using a connected
 physical phone, confirm that it is unlocked, awake, and interactive. Do not
