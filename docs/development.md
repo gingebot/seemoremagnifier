@@ -109,3 +109,5 @@ Do not unlock a connected device or send touch input as part of automated valida
 - Release signing credentials must not be committed or used for local release builds.
 - Debug and release artifacts must remain outside source control.
 - A release is not considered ready until the release checks in [`testing.md`](testing.md) pass.
+
+For the engineer release procedure, see [`releasing.md`](releasing.md).

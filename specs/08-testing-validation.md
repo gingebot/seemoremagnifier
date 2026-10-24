@@ -10,6 +10,7 @@ Complete automated coverage, physical-device validation, performance checks, and
 - [`../docs/architecture.md`](../docs/architecture.md)
 - [`../docs/development.md`](../docs/development.md)
 - [`../docs/testing.md`](../docs/testing.md)
+- [`../docs/releasing.md`](../docs/releasing.md)
 
 ## Scope
 

@@ -2,6 +2,8 @@
 
 This document defines automated tests, physical-device checks, and release validation. Runtime requirements are documented in [`architecture.md`](architecture.md), and build/deployment workflow is documented in [`development.md`](development.md).
 
+For the engineer runbook to prepare, tag, approve, and verify a GHA release, see [`releasing.md`](releasing.md).
+
 ## 1. Automated Checks
 
 Run the following from the Android project root:
