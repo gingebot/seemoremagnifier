@@ -1,0 +1,48 @@
+SeeMoreMagnifier
+Copyright 2026 SeeMoreMagnifier contributors
+
+This project includes original SeeMoreMagnifier source code, documentation,
+tests, Android resources, application artwork, and user-interface
+materials. These materials are copyright SeeMoreMagnifier contributors and
+are licensed under the GNU General Public License, version 3 or later,
+unless otherwise stated.
+
+The SeeMoreMagnifier emoji picker includes project-maintained category and
+variant data consisting of Unicode emoji characters and sequences. The
+data was generated and curated during development. Unicode characters
+and emoji sequences may be subject to the terms, specifications, and
+intellectual-property policies applicable to the Unicode Standard and
+related Unicode emoji data. No separate emoji artwork is distributed by
+this project; glyph rendering is provided by the Android/EmojiCompat
+runtime.
+
+Third-party software
+
+This project uses third-party software distributed under its own
+copyright and license terms. Those terms remain applicable to the
+corresponding components:
+
+- Kotlin and Kotlin standard library
+  Copyright JetBrains and Kotlin contributors
+  Apache License, Version 2.0
+
+- AndroidX and Jetpack Compose
+  Copyright The Android Open Source Project
+  Apache License, Version 2.0
+
+- Kotlinx Coroutines
+  Copyright JetBrains and Kotlin contributors
+  Apache License, Version 2.0
+
+- AndroidX Emoji2 bundled support
+  Copyright The Android Open Source Project and applicable upstream
+  contributors
+  Apache License, Version 2.0 and/or applicable upstream notices
+
+- JUnit
+  Copyright the JUnit contributors
+  Eclipse Public License, Version 1.0
+  Used for testing.
+
+Refer to the respective upstream distributions for complete third-party
+license texts and notices.

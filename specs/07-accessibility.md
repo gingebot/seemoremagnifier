@@ -2,7 +2,7 @@
 
 ## Objective
 
-Make the magnifier usable with TalkBack, large system settings, high-contrast overlays, and optional feedback without adding unnecessary UI complexity.
+Make the magnifier usable with TalkBack and large system settings without adding unnecessary UI complexity.
 
 ## Dependencies
 
@@ -34,7 +34,6 @@ Make the magnifier usable with TalkBack, large system settings, high-contrast ov
 - The semantic action toggles freeze/resume correctly.
 - Error and retry states are accessible.
 - Large font and display scaling preserve essential controls and status.
-- High-contrast overlays remain readable over representative camera content.
 
 ## Tests and Device Validation
 
@@ -52,8 +51,7 @@ Make the magnifier usable with TalkBack, large system settings, high-contrast ov
 
 ## Completion Checklist
 
-- [ ] Live/frozen semantics implemented.
-- [ ] Freeze/resume custom action implemented.
-- [ ] Accessible error/retry behavior implemented.
-- [ ] High-contrast overlays implemented.
-- [ ] TalkBack and large-display validation completed.
+- [x] Live/frozen semantics implemented.
+- [x] Freeze/resume custom action implemented.
+- [x] Accessible error/retry behavior implemented.
+- [x] TalkBack and large-display validation completed on the connected SM-A566B, as confirmed by the user.

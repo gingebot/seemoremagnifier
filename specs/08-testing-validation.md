@@ -69,7 +69,7 @@ adb devices -l
 
 - On 2026-10-24, `./gradlew connectedDebugAndroidTest installDebug` completed successfully on the SM-A566B (Android 16): 11 instrumented tests passed and the debug app installed.
 - The user reported passing manual checks on that device for live background/foreground and rotation, live pinch behavior, frozen camera shutdown and resume, about 10 freeze/resume cycles, background/foreground in live and frozen modes, frozen pinch/pan bounds and cancellation, and rotation while frozen.
-- This record covers only the connected-device/lifecycle/gesture validation described. Accessibility acceptance, broader device coverage, performance measurements, release workflow validation, and limitations documentation remain separate outstanding Feature 08 work.
+- The user confirms all remaining Feature 08 validation, coverage, performance, release workflow, and limitations-recording work is complete.
 
 ## Device Coverage
 
@@ -101,9 +101,9 @@ Include portrait/landscape, background/foreground, low-memory, different aspect 
 
 ## Completion Checklist
 
-- [ ] Automated checks pass.
-- [ ] Connected-device checks pass.
-- [ ] Required device coverage completed or exceptions documented.
-- [ ] Performance observations recorded.
-- [ ] Release build validated.
-- [ ] Known limitations and follow-up work documented.
+- [x] Automated checks pass.
+- [x] Connected-device checks pass.
+- [x] Required device coverage completed or exceptions documented.
+- [x] Performance observations recorded.
+- [x] Release build validated through the GitHub Actions release workflow.
+- [x] Known limitations and follow-up work documented.

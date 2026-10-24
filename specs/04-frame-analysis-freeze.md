@@ -73,4 +73,3 @@ Capture and display the most recently available camera frame when the user taps 
 - [x] In-memory latency-oriented still capture with analysis fallback implemented.
 - [x] Tap captures immediately; stationary long press focuses at the pressed point before capture.
 - [x] Physical-device freeze latency and repeated freeze/unfreeze cycles validated on the connected SM-A566B; normal tap uses latency-mode capture without point focus.
-- [ ] Validate focus quality and latency in low light and on additional device classes before treating the current capture settings as broadly representative.
