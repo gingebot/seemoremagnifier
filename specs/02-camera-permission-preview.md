@@ -58,4 +58,4 @@ Request camera permission and display a lifecycle-aware full-screen rear-camera 
 - [x] `CameraPreviewController` binds and unbinds `Preview` safely.
 - [x] Rear-camera preview observed on the connected device; CameraService confirms `Camera ID: 0` is open for `com.seemoremagnifier`.
 - [x] Error and retry states implemented.
-- [ ] Full background/foreground camera rebind and rotation behavior still needs a reliable device-level check; the device diagnostic command hung during final verification.
+- [x] On 2026-10-24, verified live preview recovery after background/foreground transitions and portrait/landscape rotation on the SM-A566B.

@@ -65,6 +65,12 @@ adb devices -l
 - TalkBack and large-display acceptance checks pass.
 - Device-specific limitations are documented before release.
 
+## Connected-Device Validation Record
+
+- On 2026-10-24, `./gradlew connectedDebugAndroidTest installDebug` completed successfully on the SM-A566B (Android 16): 11 instrumented tests passed and the debug app installed.
+- The user reported passing manual checks on that device for live background/foreground and rotation, live pinch behavior, frozen camera shutdown and resume, about 10 freeze/resume cycles, background/foreground in live and frozen modes, frozen pinch/pan bounds and cancellation, and rotation while frozen.
+- This record covers only the connected-device/lifecycle/gesture validation described. Accessibility acceptance, broader device coverage, performance measurements, release workflow validation, and limitations documentation remain separate outstanding Feature 08 work.
+
 ## Device Coverage
 
 At minimum, validate on the connected physical device and, before release where available:

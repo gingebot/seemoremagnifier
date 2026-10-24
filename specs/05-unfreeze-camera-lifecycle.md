@@ -61,4 +61,4 @@ Resume the live camera safely after a frozen frame, while releasing camera and i
 - [x] Unfreeze rebind implemented; frozen image remains visible until binding succeeds.
 - [x] Frame and camera cleanup is centralized and idempotent.
 - [x] Retryable rebind error implemented without claiming live state.
-- [ ] Physical lifecycle and repeated-cycle validation deferred: connected device reports `Dozing`; no unlock or touch input was attempted.
+- [x] On 2026-10-24, verified camera/preview shutdown while frozen, successful resume/rebind, background/foreground in live and frozen modes, and about 10 freeze/resume cycles on the SM-A566B. The user reported all checks passed.

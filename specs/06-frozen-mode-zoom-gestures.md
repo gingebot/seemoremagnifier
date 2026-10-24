@@ -64,4 +64,4 @@ Make zoom available in frozen mode and ensure tap and pinch gestures behave pred
 - [x] Shared zoom policy used by live and frozen modes.
 - [x] Tap/pinch cancellation rules implemented.
 - [x] Gesture tests pass.
-- [ ] Physical-device gesture validation completed.
+- [x] On 2026-10-24, verified frozen pinch zoom and panning remain within image bounds; pinching/interrupted gestures do not resume accidentally; rotation while frozen preserves sensible image scale without blank regions on the SM-A566B. The user reported all checks passed.

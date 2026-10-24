@@ -58,4 +58,4 @@ Allow users to pinch-zoom the live rear-camera preview with bounded, stable zoom
 - [x] Camera zoom is clamped to CameraX bounds and applied asynchronously.
 - [x] Zoom indicator displays CameraX-reported zoom state.
 - [x] Superseded CameraX zoom requests are ignored rather than reported as camera failures.
-- [ ] Physical-device pinch validation completed when the device is confirmed interactive and available. Do not attempt to unlock or inject touch input into a locked phone.
+- [x] On 2026-10-24, verified live pinch zoom in/out and confirmed pinching does not trigger freeze on the interactive SM-A566B.
