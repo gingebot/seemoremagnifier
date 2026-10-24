@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # SeeMoreMagnifier — Development and Deployment Guide
 
 This document defines the local development workflow and build/deployment policy. Runtime behavior and component design are documented in [`architecture.md`](architecture.md). Test strategy and acceptance criteria are documented in [`testing.md`](testing.md).

@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # SeeMoreMagnifier — Release Instructions
 
 This runbook is for engineers preparing and publishing a production release. Releases are built, signed, and published only by GitHub Actions. Do not build, sign, or publish a local release APK or AAB.

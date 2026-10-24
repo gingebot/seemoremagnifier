@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Security Policy
 
 ## Supported versions
@@ -23,11 +25,17 @@ Include, when safe to share:
 Please allow time for investigation and coordinated disclosure before
 publishing details.
 
-## Sensitive input and release credentials
+## Camera and user privacy
 
-SeeMoreMagnifier is an input method and may receive sensitive text through
-Android's input-method APIs. Do not include real personal data in issues,
-tests, screenshots, logs, or pull requests.
+SeeMoreMagnifier requests camera access to provide its live magnifier and
+freeze capture. The app is intended to keep captured frames in memory and does
+not save or export images. Do not include private camera content, identifiable
+people, location details, or other personal data in public issues, tests,
+screenshots, logs, or pull requests. Report any suspected unauthorized camera
+access, image retention, or disclosure privately using the reporting process
+above.
+
+## Release credentials
 
 Never commit upload keystores, passwords, tokens, `.env` files, or other
 signing material. Release signing is performed by the protected GitHub

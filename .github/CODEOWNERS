@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Require the project maintainer to review all changes, especially release automation.
 * @gingebot
 .github/ @gingebot

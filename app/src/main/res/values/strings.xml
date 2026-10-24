@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <resources>
     <string name="app_name">SeeMoreMagnifier</string>
     <string name="live_camera_preview_description">Live rear camera preview</string>

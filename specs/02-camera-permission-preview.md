@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Feature 02 — Camera Permission and Live Preview
 
 ## Objective

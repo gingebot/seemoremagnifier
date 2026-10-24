@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # SeeMoreMagnifier — Architecture and Implementation Notes
 
 This document describes the current v1 implementation and calls out differences from a more formal layered/state-machine design. Component names and examples below are descriptive unless identified as actual source files; they are not a promise that a class with that exact name exists.

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.seemoremagnifier.ui.magnifier
 
 /** Tracks whether a pointer sequence is still eligible to be interpreted as a tap. */

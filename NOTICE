@@ -1,48 +1,44 @@
-SeeMoreMagnifier
-Copyright 2026 SeeMoreMagnifier contributors
+<!-- SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+SeeMoreMagnifier — notices and attribution
 
-This project includes original SeeMoreMagnifier source code, documentation,
-tests, Android resources, application artwork, and user-interface
-materials. These materials are copyright SeeMoreMagnifier contributors and
-are licensed under the GNU General Public License, version 3 or later,
-unless otherwise stated.
+First-party materials
 
-The SeeMoreMagnifier emoji picker includes project-maintained category and
-variant data consisting of Unicode emoji characters and sequences. The
-data was generated and curated during development. Unicode characters
-and emoji sequences may be subject to the terms, specifications, and
-intellectual-property policies applicable to the Unicode Standard and
-related Unicode emoji data. No separate emoji artwork is distributed by
-this project; glyph rendering is provided by the Android/EmojiCompat
-runtime.
+Copyright 2026 SeeMoreMagnifier contributors.
+
+Unless a file or item states otherwise, first-party source code and project
+documentation are licensed under the GNU General Public License, version 3 or
+(at your option) any later version. See LICENSE.
+
+Application artwork
+
+The promotional banner at `assets/seemoremagnifier_banner.png` visibly states
+“Made with AI.” The provenance of the other application artwork
+(`assets/seemoremagnifier_icon.png`,
+`assets/seemoremagnifier_icon_with_background.png`, and
+`app/src/main/res/drawable-nodpi/seemoremagnifier_icon.png`) has not been
+documented. The applicable generation/service terms and rights to redistribute
+or relicense the artwork have not been verified. No copyright ownership or
+reuse license is asserted here for any of these artwork files. Review and
+resolve their terms before redistributing them independently or claiming they
+are covered by the project's GPL license.
+
+The launcher artwork is currently bundled in the Android app. Verify that the
+app may be distributed with it, or replace/remove it before publishing binary
+releases if the applicable rights cannot be established.
 
 Third-party software
 
-This project uses third-party software distributed under its own
-copyright and license terms. Those terms remain applicable to the
-corresponding components:
+The app and its tests use third-party AndroidX Core KTX, Activity Compose,
+Lifecycle, CameraX, Compose UI/Material, Kotlin, and Coroutines components,
+plus JUnit 4 and AndroidX Test / Espresso components in tests. These
+components are not first-party project materials; their copyrights, notices,
+and license terms remain applicable. The named upstream components are
+distributed under Apache License 2.0, except JUnit 4, which is distributed
+under Eclipse Public License 1.0. Transitive dependency licenses may have
+their own applicable notices. Consult the upstream artifacts and their
+packaged metadata for complete terms; this summary is not a complete
+machine-generated dependency inventory.
 
-- Kotlin and Kotlin standard library
-  Copyright JetBrains and Kotlin contributors
-  Apache License, Version 2.0
-
-- AndroidX and Jetpack Compose
-  Copyright The Android Open Source Project
-  Apache License, Version 2.0
-
-- Kotlinx Coroutines
-  Copyright JetBrains and Kotlin contributors
-  Apache License, Version 2.0
-
-- AndroidX Emoji2 bundled support
-  Copyright The Android Open Source Project and applicable upstream
-  contributors
-  Apache License, Version 2.0 and/or applicable upstream notices
-
-- JUnit
-  Copyright the JUnit contributors
-  Eclipse Public License, Version 1.0
-  Used for testing.
-
-Refer to the respective upstream distributions for complete third-party
-license texts and notices.
+The Gradle wrapper scripts and wrapper JAR are generated/distributed by the
+Gradle project and retain their upstream licensing and attribution.

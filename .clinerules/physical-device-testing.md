@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Physical-device testing
 
 - Before starting any test command that will use a connected physical Android device, ask the user to confirm that the phone is unlocked, awake, and interactive.

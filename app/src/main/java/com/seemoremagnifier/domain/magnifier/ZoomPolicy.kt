@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.seemoremagnifier.domain.magnifier
 
 /** Pure zoom-ratio policy shared by gesture handling and tests. */

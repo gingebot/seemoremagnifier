@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # Contributing to SeeMoreMagnifier
 
 Thank you for helping improve SeeMoreMagnifier. Please read the project
@@ -8,7 +10,7 @@ documentation and check existing issues before starting substantial work.
 - JDK 17
 - Android SDK platform 36
 - Android Debug Bridge (`adb`) for device testing
-- Task 3.x is recommended
+- Android Studio is optional; the Gradle wrapper is sufficient for CLI builds.
 
 The repository includes the Gradle wrapper. Do not commit `local.properties`,
 build outputs, IDE metadata, signing files, or credentials.
@@ -21,9 +23,10 @@ Run the relevant checks locally:
 ./gradlew testDebugUnitTest lint assembleDebug --no-daemon
 ```
 
-For IME or UI changes, also test on a device or emulator and verify keyboard
-activation, text entry, rotation, accessibility, and settings persistence.
-Do not use real personal data in screenshots or logs.
+For camera, gesture, lifecycle, or accessibility changes, also test on an
+emulator or physical Android device where practical. Before using a connected
+physical phone, confirm that it is unlocked, awake, and interactive. Do not
+include private camera content in screenshots, logs, or test reports.
 
 ## Pull requests
 
@@ -40,6 +43,9 @@ should not add local signing configuration to the repository.
 
 ## License
 
-By contributing, you agree that your contribution may be distributed under
-the GNU General Public License, version 3 or later, as described in
-`LICENSE` and `NOTICE`.
+By submitting a contribution, you agree that it may be distributed under the
+GNU General Public License, version 3 or (at your option) any later version,
+as described in `LICENSE` and `NOTICE`. Please do not submit material you do
+not have the right to license under those terms. If a contribution includes
+third-party code, assets, or generated material, identify its source and
+license in the pull request and obtain maintainer review before submission.

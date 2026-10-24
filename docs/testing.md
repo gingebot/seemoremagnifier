@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # SeeMoreMagnifier — Testing and Validation Guide
 
 This document defines automated tests, physical-device checks, and release validation. Runtime requirements are documented in [`architecture.md`](architecture.md), and build/deployment workflow is documented in [`development.md`](development.md).
