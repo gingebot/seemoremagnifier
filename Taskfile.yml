@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+version: '3'
+
+vars:
+  GRADLE: ./gradlew
+
+tasks:
+  test:
+    desc: Run debug unit tests
+    cmds:
+      - '{{.GRADLE}} :app:testDebugUnitTest --no-daemon'
+
+  instrumented-test:
+    desc: Install and run debug instrumented tests on connected Android devices
+    cmds:
+      - '{{.GRADLE}} :app:connectedDebugAndroidTest --no-daemon'
+
+  compile-debug:
+    desc: Compile debug app, unit-test, and instrumented-test sources
+    cmds:
+      - '{{.GRADLE}} :app:compileDebugKotlin :app:compileDebugJavaWithJavac :app:compileDebugUnitTestKotlin :app:compileDebugUnitTestJavaWithJavac :app:compileDebugAndroidTestKotlin :app:compileDebugAndroidTestJavaWithJavac --no-daemon'
+
+  lint:
+    desc: Run debug lint checks
+    cmds:
+      - '{{.GRADLE}} :app:lintDebug --no-daemon'
+
+  assemble-debug:
+    desc: Assemble the debug APK
+    cmds:
+      - '{{.GRADLE}} :app:assembleDebug --no-daemon'
+
+  install-debug:
+    desc: Install the debug APK on a connected Android device or emulator
+    cmds:
+      - '{{.GRADLE}} :app:installDebug --no-daemon'
+
+  mega:
+    desc: Run all tests and debug checks, then install the debug app last
+    cmds:
+      - task: test
+      - task: instrumented-test
+      - task: compile-debug
+      - task: lint
+      - task: assemble-debug
+      - task: install-debug
