@@ -29,8 +29,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -252,6 +255,9 @@ private fun CameraPreviewContent(
         mutableStateOf(gestureHelpPreferences.getBoolean("dismissed", false))
     }
     var showGestureGuide by remember { mutableStateOf(false) }
+    var showMagnifierOverlays by remember { mutableStateOf(false) }
+    var overlayActivityTrigger by remember { mutableIntStateOf(0) }
+    val showMagnifierOverlaysForActivity: () -> Unit = { overlayActivityTrigger++ }
     val previewController = remember(context) { CameraPreviewController(context) }
     val frameStore = remember { LatestFrameStore<Bitmap> { bitmap -> bitmap.recycle() } }
     var previewView by remember { mutableStateOf<androidx.camera.view.PreviewView?>(null) }
@@ -340,6 +346,17 @@ private fun CameraPreviewContent(
             showGestureGuide = true
         }
     }
+    LaunchedEffect(previewBound, frozenFrame, cameraError, overlayActivityTrigger) {
+        val magnifierIsActive = frozenFrame != null || (previewBound && cameraError == null)
+        if (!magnifierIsActive) {
+            showMagnifierOverlays = false
+            return@LaunchedEffect
+        }
+
+        showMagnifierOverlays = true
+        delay(2_000)
+        showMagnifierOverlays = false
+    }
     LaunchedEffect(frozenFrame, frozenFrameTrace) {
         val trace = frozenFrameTrace
         if (frozenFrame != null && trace != null) {
@@ -349,6 +366,7 @@ private fun CameraPreviewContent(
     }
     val liveCaptureHandler: (Offset, Boolean) -> Unit = { tapPosition, focusAtPoint ->
         if (cameraError == null && frozenFrame == null && !isCapturingStill) {
+            showMagnifierOverlaysForActivity()
             showFocusIndicator = focusAtPoint
             if (focusAtPoint) {
                 focusPointPosition = tapPosition
@@ -589,13 +607,18 @@ private fun CameraPreviewContent(
                         actionLabel = if (isCapturingStill) null else {
                             stringResource(R.string.freeze_image_action)
                         },
-                        onAction = { latestLiveCaptureHandler.value(Offset.Zero, false) },
+                        onAction = {
+                            showMagnifierOverlaysForActivity()
+                            latestLiveCaptureHandler.value(Offset.Zero, false)
+                        },
                     )
                     .pointerInput(previewController) {
                         detectMagnifierGestures(
+                            onGestureStart = showMagnifierOverlaysForActivity,
                             onZoom = { scale ->
                                 if (isCapturingStill) return@detectMagnifierGestures
                                 val state = latestZoomState.value ?: return@detectMagnifierGestures
+                                showMagnifierOverlaysForActivity()
                                 previewController.zoomBy(
                                     gestureScale = scale,
                                     zoomState = state,
@@ -613,6 +636,7 @@ private fun CameraPreviewContent(
                                 if (latestIsCapturingStill.value) return@detectMagnifierGestures
                                 if (!latestTorchAvailable.value) return@detectMagnifierGestures
                                 if (latestTorchTogglePending.value) return@detectMagnifierGestures
+                                showMagnifierOverlaysForActivity()
                                 torchTogglePending = true
                                 val requestedTorchState = !latestTorchEnabled.value
                                 previewController.toggleTorch(requestedTorchState) { succeeded ->
@@ -681,9 +705,13 @@ private fun CameraPreviewContent(
                     else -> stringResource(R.string.resume_live_preview_action)
                 },
                 semanticsAnnounceStateChange = cameraError != null,
-                onSemanticsAction = if (cameraError == null) resumeFrozenFrame else retryFrozenFrame,
+                onSemanticsAction = {
+                    showMagnifierOverlaysForActivity()
+                    if (cameraError == null) resumeFrozenFrame() else retryFrozenFrame()
+                },
                 onZoom = { scale ->
                     val bounds = zoomState ?: return@FrozenFrameContent
+                    showMagnifierOverlaysForActivity()
                     val previousZoomRatio = frozenZoomRatio
                     val frozenMinimum = maxOf(bounds.minZoomRatio, frozenBaseZoomRatio)
                     val ratio = ZoomPolicy.ratioAfterGesture(
@@ -756,7 +784,10 @@ private fun CameraPreviewContent(
                     frozenPanFlingJob?.cancel()
                     frozenPanFlingJob = null
                 },
-                onResume = { resumeFrozenFrame() },
+                onResume = {
+                    showMagnifierOverlaysForActivity()
+                    resumeFrozenFrame()
+                },
             )
         }
         FreezeScreenFlash(
@@ -780,32 +811,49 @@ private fun CameraPreviewContent(
         }
         if (frozenFrame == null) {
             zoomState?.let { currentZoom ->
-                ZoomIndicator(
-                    zoomRatio = currentZoom.zoomRatio,
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp),
-                )
+                AnimatedVisibility(
+                    visible = showMagnifierOverlays,
+                    modifier = Modifier.align(Alignment.TopStart).padding(top = 56.dp, start = 12.dp),
+                    enter = fadeIn(animationSpec = tween(durationMillis = 250)),
+                    exit = fadeOut(animationSpec = tween(durationMillis = 300)),
+                ) {
+                    ZoomIndicator(zoomRatio = currentZoom.zoomRatio)
+                }
             }
         } else {
-            ZoomIndicator(
-                zoomRatio = frozenZoomRatio,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 56.dp),
-            )
+            AnimatedVisibility(
+                visible = showMagnifierOverlays,
+                modifier = Modifier.align(Alignment.TopStart).padding(top = 56.dp, start = 12.dp),
+                enter = fadeIn(animationSpec = tween(durationMillis = 250)),
+                exit = fadeOut(animationSpec = tween(durationMillis = 300)),
+            ) {
+                ZoomIndicator(zoomRatio = frozenZoomRatio)
+            }
         }
         if ((previewBound && cameraError == null) || frozenFrame != null) {
-            Surface(
-                onClick = { showGestureGuide = true },
+            AnimatedVisibility(
+                visible = showMagnifierOverlays,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 56.dp, end = 12.dp),
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
-                contentColor = MaterialTheme.colorScheme.onSurface,
+                enter = fadeIn(animationSpec = tween(durationMillis = 250)),
+                exit = fadeOut(animationSpec = tween(durationMillis = 300)),
             ) {
-                Text(
-                    text = stringResource(R.string.gesture_help_button),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+                Surface(
+                    onClick = {
+                        showMagnifierOverlaysForActivity()
+                        showGestureGuide = true
+                    },
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ) {
+                    Text(
+                        text = stringResource(R.string.gesture_help_button),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
             }
         }
         if (showGestureGuide) {
