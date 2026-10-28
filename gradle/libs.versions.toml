@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors
 # SPDX-License-Identifier: GPL-3.0-or-later
 [versions]
-agp = "9.0.0"
+agp = "9.5.0"
 kotlin = "2.3.21"
 compose-bom = "2026.06.01"
 activity-compose = "1.13.0"
