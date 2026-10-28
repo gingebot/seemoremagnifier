@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 SeeMoreMagnifier contributors
 # SPDX-License-Identifier: GPL-3.0-or-later
 [versions]
-agp = "8.13.2"
+agp = "9.0.0"
 kotlin = "2.3.21"
 compose-bom = "2026.09.00"
 activity-compose = "1.13.0"
@@ -40,5 +40,4 @@ androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", vers
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
