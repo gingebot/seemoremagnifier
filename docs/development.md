@@ -28,12 +28,12 @@ The following values must be recorded when the Android project is created:
 
 ### Selected project versions
 
-The initial Android project uses this pinned version set:
+The current Android project uses this pinned version set:
 
 | Component | Version / value |
 |---|---|
-| Gradle wrapper | 8.13 |
-| Android Gradle Plugin | 8.13.2 |
+| Gradle wrapper | 9.8.2 |
+| Android Gradle Plugin | 9.5.0 |
 | JDK | 17 |
 | Kotlin | 2.3.21 |
 | Compose compiler Gradle plugin | `org.jetbrains.kotlin.plugin.compose`, 2.3.21 |
@@ -41,21 +41,21 @@ The initial Android project uses this pinned version set:
 | AndroidX Activity Compose | 1.13.0 |
 | AndroidX Lifecycle / Lifecycle Compose | 2.10.0 |
 | CameraX | 1.6.2 |
-| AndroidX Core KTX | 1.17.0 |
-| Coroutines Android | 1.10.2 |
+| AndroidX Core KTX | 1.19.1 |
+| Coroutines Android | 1.11.0 |
 | JUnit | 4.13.2 |
 | AndroidX Test Runner | 1.7.0 |
 | AndroidX Test Ext JUnit | 1.3.0 |
 | Espresso | 3.7.0 |
-| Android SDK Build Tools | 35.0.0 (AGP-selected default) |
-| Compile SDK | 36 |
-| Target SDK | 36 |
+| Android SDK Build Tools | 36.0.0 (AGP-selected default) |
+| Compile SDK | 37 |
+| Target SDK | 37 |
 | Minimum SDK | 26 |
 | Application ID / namespace | `com.seemoremagnifier` |
 
-Compose library versions are controlled by the stable Compose BOM, while the Compose compiler plugin version follows Kotlin. The BOM does not configure the compiler plugin. Compose BOM 2026.06.01 selects the Compose 1.11.x generation, which is compatible with this API 36 / AGP 8.13 project; Compose 1.12 requires API 37 and AGP 9. Dependency versions are centralized in `gradle/libs.versions.toml`.
+Compose library versions are controlled by the stable Compose BOM, while the Compose compiler plugin version follows Kotlin. The BOM does not configure the compiler plugin. Compose BOM 2026.06.01 selects the Compose 1.11.x generation. Dependency versions are centralized in `gradle/libs.versions.toml`.
 
-AGP 8.13.2 is chosen over the newer AGP 9 line to match the installed API 36 SDK and the conventional Android/Kotlin plugin setup. AGP 8.13 requires Gradle 8.13 and JDK 17 and supports Kotlin 2.3 with version 8.13.2. Lifecycle 2.10.0 is pinned because Lifecycle 2.11.0 requires API 37 and AGP 9.1 or later. The selected versions should be upgraded together only after validating the compatibility matrix and installed SDK requirements.
+The project currently uses AGP 9.5.0 with Gradle 9.8.2 and JDK 17. API 37 is the compile and target SDK; minimum SDK remains 26. Targeting API 37 opts the app into Android 17 target-SDK behavior changes, including the removal of opt-outs from large-screen orientation and resizability handling. Test layouts on large-screen devices when changing target SDK. Keep the selected versions aligned and validate the toolchain compatibility matrix when upgrading dependencies.
 
 ## 2. Build Commands
 

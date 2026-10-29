@@ -14,12 +14,12 @@ val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").o
 
 android {
     namespace = "com.seemoremagnifier"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.seemoremagnifier"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = providers.gradleProperty("app.versionCode").get().toInt()
         versionName = providers.gradleProperty("app.versionName").get()
 
